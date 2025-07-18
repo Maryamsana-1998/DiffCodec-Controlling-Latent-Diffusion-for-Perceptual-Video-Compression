@@ -8,6 +8,7 @@ from ldm.modules.diffusionmodules.util import (
     linear,
     zero_module,
 )
+import torch.nn.functional as F
 from ldm.modules.attention import SpatialTransformer
 from ldm.modules.diffusionmodules.openaimodel import TimestepBlock
 

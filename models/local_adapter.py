@@ -9,6 +9,8 @@ from ldm.modules.diffusionmodules.util import (
     zero_module,
     timestep_embedding,
 )
+
+import torch.nn.functional as F
 from ldm.modules.attention import SpatialTransformer
 from ldm.modules.diffusionmodules.openaimodel import UNetModel, TimestepBlock, TimestepEmbedSequential, ResBlock, Downsample, AttentionBlock
 from ldm.util import exists
@@ -244,10 +246,10 @@ class LocalAdapter(nn.Module):
     def make_zero_conv(self, channels):
         return LocalTimestepEmbedSequential(zero_module(conv_nd(self.dims, channels, channels, 1, padding=0)))
 
-    def forward(self, x, timesteps, context, local_conditions, **kwargs):
+    def forward(self, x, timesteps, context, local_conditions, flow, **kwargs):
         t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False)
         emb = self.time_embed(t_emb)
-        local_features = self.feature_extractor(local_conditions)
+        local_features = self.feature_extractor(local_conditions,flow)
 
         outs = []
         h = x.type(self.dtype)

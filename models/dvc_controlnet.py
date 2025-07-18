@@ -170,6 +170,7 @@ class DVC_ControlNet(LatentDiffusion):
         if not self.sd_locked:
             # Add diffusion model blocks with different learning rates
             param_groups.extend([
+                {"params": self.model.diffusion_model.input_blocks.parameters(), "lr": lr*0.5},
                 {"params": self.model.diffusion_model.middle_block.parameters(), "lr": lr*0.5},
                 {"params": self.model.diffusion_model.output_blocks.parameters(), "lr": lr},
                 {"params": self.model.diffusion_model.out.parameters(), "lr": lr},

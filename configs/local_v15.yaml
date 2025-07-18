@@ -1,0 +1,117 @@
+model:
+  base_learning_rate: 1.0e-05
+  target: models.dvc_controlnet.DVC_ControlNet
+  params:
+    linear_start: 0.00085
+    linear_end: 0.0120
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: "jpg"
+    cond_stage_key: "txt"
+    image_size: 64
+    channels: 4
+    cond_stage_trainable: false
+    conditioning_key: crossattn
+    monitor: val/loss_simple_ema
+    scale_factor: 0.18215
+    use_ema: False
+    mode: local
+    perceptual_weight: 0.075
+    original_elbo_weight: 0.001
+    parameterization: eps 
+    edge_awareness: true
+    snr_gamma : 5.0
+
+    local_control_config:
+      target: models.local_adapter.LocalAdapter
+      params:
+        in_channels: 3
+        model_channels: 320
+        inject_channels: [192, 256, 384, 512]
+        inject_layers: [1, 4, 7, 10]
+        num_res_blocks: 2
+        attention_resolutions: [4, 2,1]
+        channel_mult: [1, 2, 4, 4]
+        use_checkpoint: True
+        num_heads: 8
+        use_spatial_transformer: True
+        transformer_depth: 1
+        context_dim: 768
+        legacy: False
+
+    unet_config:
+      target: models.local_adapter.LocalControlUNetModel
+      params:
+        image_size: 64
+        in_channels: 3
+        model_channels: 320
+        out_channels: 3
+        num_res_blocks: 2
+        attention_resolutions: [4, 2,1]
+        channel_mult: [1, 2, 4, 4]
+        use_checkpoint: True
+        num_heads: 8
+        use_spatial_transformer: True
+        transformer_depth: 1
+        context_dim: 768
+        legacy: False
+
+    first_stage_config:
+      target: ldm.models.autoencoder.VQModelInterface
+      params:
+        ckpt_path: ckpt/vq_f4.ckpt
+        embed_dim: 3
+        n_embed: 8192
+        ddconfig:
+          double_z: false
+          z_channels: 3
+          resolution: 256
+          in_channels: 3
+          out_ch: 3
+          ch: 128
+          ch_mult:
+          - 1
+          - 2
+          - 4
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+
+    cond_stage_config:
+      target: ldm.modules.encoders.modules.FrozenCLIPEmbedder
+
+data:
+  target: main.DataModuleFromConfig
+  params:
+    batch_size: 1
+    num_workers: 1
+    wrap: false
+    train:
+      target: ldm.data.vimeo_control.UniDataset
+      params:
+        anno_path: data/final_captions.txt
+        index_file: data/train_index.txt
+        local_type_list: [r1,r2, flow,flow_b]
+        transform: true
+    validation:
+      target: ldm.data.vimeo_control.UniDataset
+      params:
+        anno_path: data/final_captions.txt
+        index_file: data/val_index.txt
+        local_type_list: [r1,r2, flow,flow_b]
+        transform: true
+
+lightning:
+  callbacks:
+    image_logger:
+      target: main.ImageLogger
+      params:
+        batch_frequency: 5000
+        max_images: 8
+        increase_log_steps: False
+
+  trainer:
+    benchmark: True

@@ -669,7 +669,8 @@ if __name__ == "__main__":
         print("#### Data #####")
         for k in data.datasets:
             print(f"{k}, {data.datasets[k].__class__.__name__}, {len(data.datasets[k])}")
-
+            # print('testing data', data.datasets[k][0])
+        
         # configure learning rate
         bs, base_lr = config.data.params.batch_size, config.model.base_learning_rate
         if not cpu:
@@ -692,7 +693,7 @@ if __name__ == "__main__":
             print("++++ NOT USING LR SCALING ++++")
             print(f"Setting learning rate to {model.learning_rate:.2e}")
 
-
+        model.sd_locked = True
         # allow checkpointing via USR1
         def melk(*args, **kwargs):
             # run all checkpoint hooks
