@@ -12,7 +12,7 @@ from ldm.modules.diffusionmodules.util import (
 
 import torch.nn.functional as F
 from ldm.modules.attention import SpatialTransformer
-from ldm.modules.diffusionmodules.openaimodel import UNetModel, TimestepBlock, TimestepEmbedSequential, ResBlock, Downsample, AttentionBlock
+from ldm.modules.diffusionmodules.openaimodel import UNetModel, ResBlock, Downsample, AttentionBlock
 from ldm.util import exists
 from models.adapter_utils import Occulsion_Aware_FeatureExtractor
 

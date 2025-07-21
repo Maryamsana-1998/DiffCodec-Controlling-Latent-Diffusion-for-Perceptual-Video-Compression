@@ -1,5 +1,5 @@
 model:
-  target: models.uni_controlnet_wrap.UniControlNet
+  target: models.dvc_controlnet.DVC_ControlNet
   params:
     linear_start: 0.00085
     linear_end: 0.0120
@@ -18,13 +18,13 @@ model:
     mode: local
     perceptual_weight: 0.1
     original_elbo_weight: 0.001
-    parameterization: v 
     edge_awareness: true
     snr_gamma : 5.0
 
     local_control_config:
-      target: models.occulsion_aware_adapter.LocalAdapter
+      target: models.local_adapter.LocalAdapter
       params:
+        use_checkpoint: True
         in_channels: 4
         model_channels: 320
         inject_channels: [192, 256, 384, 512]
@@ -32,11 +32,11 @@ model:
         num_res_blocks: 2
         attention_resolutions: [4, 2,1]
         channel_mult: [1, 2, 4, 4]
-        use_checkpoint: True
-        num_heads: 8
+        num_heads: 64
         use_spatial_transformer: True
+        use_linear_in_transformer: True
         transformer_depth: 1
-        context_dim: 768
+        context_dim: 1024
         legacy: False
 
     unet_config:
@@ -50,10 +50,11 @@ model:
         attention_resolutions: [4, 2,1]
         channel_mult: [1, 2, 4, 4]
         use_checkpoint: True
-        num_heads: 8
+        num_heads: 64
         use_spatial_transformer: True
+        use_linear_in_transformer: True
         transformer_depth: 1
-        context_dim: 768
+        context_dim: 1024
         legacy: False
 
     first_stage_config:
@@ -80,18 +81,17 @@ model:
           target: torch.nn.Identity
 
     cond_stage_config:
-      target: ldm.modules.encoders.modules.FrozenCLIPEmbedder
+      target: ldm.modules.encoders.modules.FrozenOpenCLIPEmbedder
+      params:
+        freeze: True
+        layer: "penultimate"
 
 data:
-  target: src.train.video_dataset.UniDataset
+  target: ldm.data.vimeo_control.UniDataset
   params:
     anno_path: data/final_captions.txt
-    root_dir: /data3/local_datasets/vimeo_sequences/
+    index_file: data/val_index.txt
     local_type_list: [r1,r2, flow,flow_b]
-    global_type_list: []
-    resolution: 512
-    drop_txt_prob: 0.3
-    keep_all_cond_prob: 0.9
-    drop_all_cond_prob: 0.5
-    drop_each_cond_prob: [0.3,0.3]
     transform: true
+
+
