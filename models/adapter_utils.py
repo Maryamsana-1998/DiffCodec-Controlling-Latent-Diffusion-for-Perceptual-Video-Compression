@@ -32,6 +32,10 @@ class LocalTimestepEmbedSequential(nn.Sequential, TimestepBlock):
                 x = layer(x)
         return x
 
+class GroupNorm32(nn.GroupNorm):
+    def forward(self, x):
+        return super().forward(x.float()).type(x.dtype)
+
 
 class FDN(nn.Module):
     def __init__(self, norm_nc, label_nc):
@@ -68,8 +72,8 @@ class LocalResBlock(nn.Module):
         self.dropout = dropout
         self.out_channels = out_channels or channels
         self.use_checkpoint = use_checkpoint
-        self.norm_in = FDN(channels, inject_channels)
-        self.norm_out = FDN(self.out_channels, inject_channels)
+        self.norm_in = GroupNorm32(channels)
+        self.norm_out = GroupNorm32(self.out_channels)
 
         self.in_layers = nn.Sequential(
             nn.Identity(),
