@@ -199,7 +199,9 @@ class Occulsion_Aware_FeatureExtractor(nn.Module):
             nn.SiLU(),
             conv_nd(dims, 16, 32, 3, padding=1, stride=2),
             nn.SiLU(),
-            conv_nd(dims, 32, 32, 3, padding=1),
+            conv_nd(dims, 32, 64, 3, padding=1, stride=2),
+            nn.SiLU(),
+            conv_nd(dims, 64, 64, 3, padding=1),
             nn.SiLU(),
         )
         self.last_pre_extractor = LocalTimestepEmbedSequential(
@@ -207,19 +209,21 @@ class Occulsion_Aware_FeatureExtractor(nn.Module):
             nn.SiLU(),
             conv_nd(dims, 16, 32, 3, padding=1, stride=2),
             nn.SiLU(),
-            conv_nd(dims, 32, 32, 3, padding=1),
+            conv_nd(dims, 32, 64, 3, padding=1, stride=2),
+            nn.SiLU(),
+            conv_nd(dims, 64, 64, 3, padding=1),
             nn.SiLU(),
         )
         self.wrapper = FeatureWarperSoftsplat()
         self.extractors_first = nn.ModuleList([
-            LocalTimestepEmbedSequential(conv_nd(dims, 32, int(inject_channels[0] / 2), 3, padding=1, stride=2), nn.SiLU()),
+            LocalTimestepEmbedSequential(conv_nd(dims, 64, int(inject_channels[0] / 2), 3, padding=1, stride=2), nn.SiLU()),
             LocalTimestepEmbedSequential(conv_nd(dims, int(inject_channels[0] / 2), int(inject_channels[1] / 2), 3, padding=1, stride=2), nn.SiLU()),
             LocalTimestepEmbedSequential(conv_nd(dims, int(inject_channels[1] / 2), int(inject_channels[2] / 2), 3, padding=1, stride=2), nn.SiLU()),
             LocalTimestepEmbedSequential(conv_nd(dims, int(inject_channels[2] / 2), int(inject_channels[3] / 2), 3, padding=1, stride=2), nn.SiLU())
         ])
 
         self.extractors_last = nn.ModuleList([
-            LocalTimestepEmbedSequential(conv_nd(dims, 32, int(inject_channels[0] / 2), 3, padding=1, stride=2), nn.SiLU()),
+            LocalTimestepEmbedSequential(conv_nd(dims, 64, int(inject_channels[0] / 2), 3, padding=1, stride=2), nn.SiLU()),
             LocalTimestepEmbedSequential(conv_nd(dims, int(inject_channels[0] / 2), int(inject_channels[1] / 2), 3, padding=1, stride=2), nn.SiLU()),
             LocalTimestepEmbedSequential(conv_nd(dims, int(inject_channels[1] / 2), int(inject_channels[2] / 2), 3, padding=1, stride=2), nn.SiLU()),
             LocalTimestepEmbedSequential(conv_nd(dims, int(inject_channels[2] / 2), int(inject_channels[3] / 2), 3, padding=1, stride=2), nn.SiLU())
@@ -247,7 +251,7 @@ class Occulsion_Aware_FeatureExtractor(nn.Module):
         output_features = []
 
         # normalize and interpolate 
-        flow_res = [128, 64, 32 , 16 ]
+        flow_res = [64, 32 , 16 , 8]
 
         for idx in range(len(self.extractors_first)):
 

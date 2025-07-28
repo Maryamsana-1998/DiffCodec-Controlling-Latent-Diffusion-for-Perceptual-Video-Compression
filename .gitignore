@@ -209,3 +209,4 @@ annotator/ckpts/*
 ckpt/*
 data/*.txt
 logs/*
+data/fill50k/*
