@@ -22,7 +22,7 @@ import os
 import random
 import shutil
 from pathlib import Path
-from utils import load_controls_and_flows
+from utils import load_controls_and_flows,get_pred_original_sample
 import accelerate
 import numpy as np
 import torch
@@ -1049,17 +1049,11 @@ def main(args):
                     return_dict=False,
                 )[0]
 
-                with torch.no_grad():
-                    a = torch.sqrt(noise_scheduler.alphas_cumprod[timesteps]).view(-1, 1, 1, 1)
-                    b = torch.sqrt(1 - noise_scheduler.alphas_cumprod[timesteps]).view(-1, 1, 1, 1)
-
                 # Get the target for loss depending on the prediction type
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise
-                    x0_hat = (latents - b * model_pred) / a
                 elif noise_scheduler.config.prediction_type == "v_prediction":
                     target = noise_scheduler.get_velocity(latents, noise, timesteps)
-                    x0_hat = a * latents - b * model_pred
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
                 
@@ -1071,8 +1065,15 @@ def main(args):
 
                 # calculate image from model pred lpips calculation
 
-                if args.perceptual_weight is not None:
+                if args.perceptual_weight is not None or args.edge_weight is not None:
+                    x0_hat = get_pred_original_sample(noise_scheduler, 
+                                                      timesteps, 
+                                                      noisy_latents, 
+                                                      model_pred, 
+                                                      vae)
 
+                if args.perceptual_weight is not None:
+                    
                     img_hat = vae.decode(x0_hat / vae.config.scaling_factor).sample 
                     img_hat = img_hat.clamp(-1, 1)
 
@@ -1082,7 +1083,7 @@ def main(args):
                     logs.update({"loss_lpips": lpips_loss.detach().item()})
 
                 if args.edge_weight is not None:
-                    edge_loss = edge_aware_loss(img_hat.img_gt)
+                    edge_loss = edge_aware_loss(img_hat,img_gt)
                     loss+=(edge_loss*args.edge_weight)
                     logs.update({"loss_edge": edge_loss.detach().item()})
 

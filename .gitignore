@@ -210,3 +210,6 @@ ckpt/*
 data/*.txt
 logs/*
 data/fill50k/*
+data/Beauty
+experiments/
+slurm*
