@@ -5,8 +5,8 @@
 #SBATCH --mem-per-gpu=24G
 #SBATCH -p batch
 #SBATCH -w vll1
-#SBATCH -o slurm.out
-#SBATCH -e slurm.err
+#SBATCH -o experiments/slurm.out
+#SBATCH -e experiments/slurm.err
 
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -23,4 +23,10 @@ accelerate launch --num_processes 8 train_controlnet.py \
  --learning_rate 1e-5 \
  --train_batch_size=1 \
  --gradient_accumulation_steps=4 \
- --num_train_epochs=10 
+ --num_train_epochs=10 \
+ --controlnet_model_name_or_path "experiments/controlnet/checkpoint-6000/controlnet/diffusion_pytorch_model.safetensors" \
+ --logging_dir "$OUTPUT_DIR/logs" \
+ --report_to tensorboard \
+ --perceptual_weight 0.075 \
+ --edge_weight 0.025 \
+ --enable_xformers_memory_efficient_attention

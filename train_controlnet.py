@@ -42,7 +42,7 @@ from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
 from controlnet.dataset import UniDataset
 from lpips_loss import NormFixLPIPS
-from sobel_edge_loss import SobelEdgeLoss
+from edge_loss import SobelEdgeLoss
 
 import diffusers
 from diffusers import (
@@ -887,7 +887,7 @@ def main(args):
             lpips_model.to(accelerator.device)
 
     if args.edge_weight is not None:
-        edge_aware_loss = SobelEdgeLoss()
+        edge_aware_loss = SobelEdgeLoss().to(accelerator.device)
     # Scheduler and math around the number of training steps.
     # Check the PR https://github.com/huggingface/diffusers/pull/8312 for detailed explanation.
     num_warmup_steps_for_scheduler = args.lr_warmup_steps * accelerator.num_processes
@@ -1066,7 +1066,7 @@ def main(args):
                 # calculate image from model pred lpips calculation
 
                 if args.perceptual_weight is not None or args.edge_weight is not None:
-                    x0_hat = get_pred_original_sample(noise_scheduler, 
+                    img_hat = get_pred_original_sample(noise_scheduler, 
                                                       timesteps, 
                                                       noisy_latents, 
                                                       model_pred, 
@@ -1074,9 +1074,6 @@ def main(args):
 
                 if args.perceptual_weight is not None:
                     
-                    img_hat = vae.decode(x0_hat / vae.config.scaling_factor).sample 
-                    img_hat = img_hat.clamp(-1, 1)
-
                     lpips_loss = lpips_model(img_hat, img_gt, normalize=False).mean()
                     loss+= (args.perceptual_weight*lpips_loss)
 

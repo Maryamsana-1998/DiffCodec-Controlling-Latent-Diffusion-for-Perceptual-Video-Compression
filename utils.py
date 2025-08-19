@@ -81,6 +81,7 @@ def get_pred_original_sample(noise_scheduler, timesteps, sample, model_output, v
 
     # 3. scale and decode the image latents with vae
     latents = 1 / vae.config.scaling_factor * pred_original_sample
+    # print(f"latents shape: {latents.shape}", pred_original_sample.shape)
     with torch.no_grad():
         image = vae.decode(latents).sample
 

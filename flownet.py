@@ -15,6 +15,23 @@ def zero_module(module):
         nn.init.zeros_(p)
     return module
 
+class FDN(nn.Module):
+    def __init__(self, norm_nc, label_nc):
+        super().__init__()
+        ks = 3
+        pw = ks // 2
+        self.param_free_norm = nn.GroupNorm(32, norm_nc, affine=False)
+        self.conv_gamma = nn.Conv2d(label_nc, norm_nc, kernel_size=ks, padding=pw)
+        self.conv_beta = nn.Conv2d(label_nc, norm_nc, kernel_size=ks, padding=pw)
+
+    def forward(self, x, local_features):
+        normalized = self.param_free_norm(x)
+        assert local_features.size()[2:] == x.size()[2:]
+        gamma = self.conv_gamma(local_features)
+        beta = self.conv_beta(local_features)
+        out = normalized * (1 + gamma) + beta
+        return out
+
 class FeatureWarperSoftsplat(nn.Module):
     def __init__(self, with_learnable_metric=False, in_channels=128):
         super().__init__()
@@ -191,8 +208,15 @@ class DualFlowControlNet(ControlNetModel):
         super().__init__(*args, block_out_channels=block_out_channels, **kwargs)
 
         self.block_out_channels = block_out_channels  # keep for clarity
-        self.feature_extractor = Bi_Dir_FeatureExtractor(inject_channels =(320, 320, 640 , 1280), )
+        self.inject_channels = (320, 320, 640 , 1280)
+        self.feature_extractor = Bi_Dir_FeatureExtractor(inject_channels =self.inject_channels, )
         self.controlnet_cond_embedding = nn.Identity()
+        C64,C32,C16,C08 = self.inject_channels
+        self.fdn64 = FDN(norm_nc=C64,  label_nc=C64)   # e.g., C64=320
+        self.fdn32 = FDN(norm_nc=C32,  label_nc=C32)   # e.g., C32=640
+        self.fdn16 = FDN(norm_nc=C16,  label_nc=C16)   # e.g., C16=1280
+        self.fdn08 = FDN(norm_nc=C08,  label_nc=C08)   # e.g., C08=1280
+
 
 
 
@@ -230,7 +254,7 @@ class DualFlowControlNet(ControlNetModel):
 
         # ---- mirrored ControlNet path with injections ----
         sample = self.conv_in(sample)            # [B, 320, 64, 64]
-        sample = sample + P64     
+        sample = self.fdn64(sample, P64)     
         
         down_block_res_samples: Tuple[torch.Tensor, ...] = (sample,)
         for i, down_block in enumerate(self.down_blocks,):
@@ -244,12 +268,12 @@ class DualFlowControlNet(ControlNetModel):
             else:
                 sample, res_samples = down_block(hidden_states=sample, temb=emb)
 
-            if i == 0:        # after 64->32
-                sample = sample + P32
-            elif i == 1:      # after 32->16
-                sample = sample + P16
-            else:             # after 16->8 (blocks 2 and possibly 3)
-                sample = sample + P08
+            if i == 0:        # 64→32 stage output
+                sample = self.fdn32(sample, P32)
+            elif i == 1:      # 32→16
+                sample = self.fdn16(sample, P16)
+            else:             # 16→8 (and deeper if present) # can mask and scale the conds
+                sample = self.fdn08(sample, P08)
           
             down_block_res_samples += res_samples
 
