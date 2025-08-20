@@ -209,13 +209,22 @@ class DualFlowControlNet(ControlNetModel):
 
         self.block_out_channels = block_out_channels  # keep for clarity
         self.inject_channels = (320, 320, 640 , 1280)
+
         self.feature_extractor = Bi_Dir_FeatureExtractor(inject_channels =self.inject_channels, )
         self.controlnet_cond_embedding = nn.Identity()
+
         C64,C32,C16,C08 = self.inject_channels
         self.fdn64 = FDN(norm_nc=C64,  label_nc=C64)   # e.g., C64=320
         self.fdn32 = FDN(norm_nc=C32,  label_nc=C32)   # e.g., C32=640
         self.fdn16 = FDN(norm_nc=C16,  label_nc=C16)   # e.g., C16=1280
         self.fdn08 = FDN(norm_nc=C08,  label_nc=C08)   # e.g., C08=1280
+
+        # self.zero_convs = nn.ModuleList([
+        #     zero_module(nn.Conv2d(C64, C64, 1)),
+        #     zero_module(nn.Conv2d(C32, C32, 1)),
+        #     zero_module(nn.Conv2d(C16, C16, 1)),
+        #     zero_module(nn.Conv2d(C08, C08, 1)),
+        # ])
 
 
 
@@ -254,7 +263,15 @@ class DualFlowControlNet(ControlNetModel):
 
         # ---- mirrored ControlNet path with injections ----
         sample = self.conv_in(sample)            # [B, 320, 64, 64]
-        sample = self.fdn64(sample, P64)     
+
+        # print('sample ', torch.std(sample), torch.mean(sample))
+
+        # print(torch.std(P64), torch.mean(P64))
+        sample = self.fdn64(sample, P64) 
+
+        # print('sample after fdn64 ', torch.std(sample), torch.mean(sample))
+        # sample = sample + self.zero_convs[0](P64)  # additive residual  
+        sample = sample + P64
         
         down_block_res_samples: Tuple[torch.Tensor, ...] = (sample,)
         for i, down_block in enumerate(self.down_blocks,):
@@ -268,13 +285,23 @@ class DualFlowControlNet(ControlNetModel):
             else:
                 sample, res_samples = down_block(hidden_states=sample, temb=emb)
 
-            if i == 0:        # 64→32 stage output
+            if i == 0:
+                print('add 32')
                 sample = self.fdn32(sample, P32)
-            elif i == 1:      # 32→16
+                # sample = sample + self.zero_convs[1](P32)
+                sample = sample + P32
+            elif i == 1:
+                print('add 16')
                 sample = self.fdn16(sample, P16)
-            else:             # 16→8 (and deeper if present) # can mask and scale the conds
+                # sample = sample + self.zero_convs[2](P16)
+                sample = sample + P16
+            else:
+                print('add 08')
                 sample = self.fdn08(sample, P08)
-          
+                # sample = sample + self.zero_convs[3](P08)
+                sample = sample + P08
+
+                
             down_block_res_samples += res_samples
 
 
@@ -287,24 +314,27 @@ class DualFlowControlNet(ControlNetModel):
         else:
             sample = self.mid_block(sample, emb)
 
-        # ---- project into residuals using ControlNet's residual heads ----
         controlnet_down_block_res_samples: Tuple[torch.Tensor, ...] = ()
         for down_res, ctrl_block in zip(down_block_res_samples, self.controlnet_down_blocks):
             controlnet_down_block_res_samples += (ctrl_block(down_res),)
 
         mid_block_res_sample = self.controlnet_mid_block(sample)
 
-        # ---- scale like ControlNet ----
-        if guess_mode and not self.config.global_pool_conditions:
-            # Optional logspace per-stage scaling (0.1..1.0), same as diffusers
-            import math
-            n = len(controlnet_down_block_res_samples) + 1
-            scales = torch.logspace(math.log10(0.1), 0, n, device=sample.device) * conditioning_scale
-            down_block_res_samples = [x * s for x, s in zip(controlnet_down_block_res_samples, scales[:-1])]
-            mid_block_res_sample = mid_block_res_sample * scales[-1]
-        else:
-            down_block_res_samples = [x * conditioning_scale for x in controlnet_down_block_res_samples]
-            mid_block_res_sample = mid_block_res_sample * conditioning_scale
+        # --- scaling (like ref) ---
+        down_block_res_samples = [x * conditioning_scale for x in controlnet_down_block_res_samples]
+        mid_block_res_sample = mid_block_res_sample * conditioning_scale
+
+        # # ---- scale like ControlNet ----
+        # if guess_mode and not self.config.global_pool_conditions:
+        #     # Optional logspace per-stage scaling (0.1..1.0), same as diffusers
+        #     import math
+        #     n = len(controlnet_down_block_res_samples) + 1
+        #     scales = torch.logspace(math.log10(0.1), 0, n, device=sample.device) * conditioning_scale
+        #     down_block_res_samples = [x * s for x, s in zip(controlnet_down_block_res_samples, scales[:-1])]
+        #     mid_block_res_sample = mid_block_res_sample * scales[-1]
+        # else:
+        #     down_block_res_samples = [x * conditioning_scale for x in controlnet_down_block_res_samples]
+        #     mid_block_res_sample = mid_block_res_sample * conditioning_scale
 
         if self.config.global_pool_conditions:
             down_block_res_samples = [x.mean(dim=(2, 3), keepdim=True) for x in down_block_res_samples]
