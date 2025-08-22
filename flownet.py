@@ -286,17 +286,17 @@ class DualFlowControlNet(ControlNetModel):
                 sample, res_samples = down_block(hidden_states=sample, temb=emb)
 
             if i == 0:
-                print('add 32')
+                # print('add 32')
                 sample = self.fdn32(sample, P32)
                 # sample = sample + self.zero_convs[1](P32)
                 sample = sample + P32
             elif i == 1:
-                print('add 16')
+                # print('add 16')
                 sample = self.fdn16(sample, P16)
                 # sample = sample + self.zero_convs[2](P16)
                 sample = sample + P16
             else:
-                print('add 08')
+                # print('add 08')
                 sample = self.fdn08(sample, P08)
                 # sample = sample + self.zero_convs[3](P08)
                 sample = sample + P08
