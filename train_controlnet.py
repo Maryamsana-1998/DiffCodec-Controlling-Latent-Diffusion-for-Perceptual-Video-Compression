@@ -942,6 +942,13 @@ def main(args):
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
+
+    if accelerator.is_main_process:
+        logger.info(f"Trackers initialized: {accelerator.trackers}")
+        for tracker in accelerator.trackers:
+            if tracker.name == "tensorboard":
+                logger.info(f"TensorBoard logging to: {tracker.run_dir}")
+
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
 
