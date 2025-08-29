@@ -57,13 +57,13 @@ class FeatureWarperSoftsplat(nn.Module):
             metric = torch.ones_like(flow[:, :1])  # shape: [B, 1, H, W]
 
         # print('metric', metric.shape)
-
-        warped = softsplat(
-            tenIn=feat_ref,
-            tenFlow=flow,
-            tenMetric=metric,
-            strMode="soft"
-        )
+        with torch.cuda.amp.autocast(enabled=False):
+            warped = softsplat(
+                tenIn=feat_ref,
+                tenFlow=flow,
+                tenMetric=metric,
+                strMode="soft"
+            )
 
         if mask!= None:
              warped = warped*(1-mask)

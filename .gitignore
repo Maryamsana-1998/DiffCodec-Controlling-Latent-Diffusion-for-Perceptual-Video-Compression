@@ -213,3 +213,4 @@ data/fill50k/*
 data/Beauty
 experiments/
 slurm*
+data/testing/

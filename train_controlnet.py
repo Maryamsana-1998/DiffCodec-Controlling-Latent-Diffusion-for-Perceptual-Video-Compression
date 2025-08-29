@@ -40,7 +40,7 @@ from PIL import Image
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
-from controlnet.dataset import UniDataset
+from dataset import UniDataset
 from lpips_loss import NormFixLPIPS
 from edge_loss import SobelEdgeLoss
 
@@ -145,11 +145,11 @@ def log_validation(
                 height=512,
                 width=512,
                 num_inference_steps=30,
-                guidance_scale=7.5,
+                guidance_scale=4.5,
                 negative_prompt=None,
                 num_images_per_prompt=1,
                 generator=generator,
-                controlnet_conditioning_scale=1.0,
+                controlnet_conditioning_scale=2.0,
                 guess_mode=False,
                 output_type="pil",
                 return_dict=True,
@@ -171,10 +171,11 @@ def log_validation(
     tracker_key = "test" if is_final_validation else "validation"
 
     for tracker in accelerator.trackers:
+        target_size = (512, 512)
         if tracker.name == "tensorboard":
             for log in image_logs:
-                imgs = [np.asarray(log["validation_image"])] if log["validation_image"] is not None else []
-                imgs += [np.asarray(im) for im in log["images"]]
+                imgs = [np.asarray(log["validation_image"].resize(target_size, Image.BILINEAR))] if log["validation_image"] is not None else []
+                imgs += [np.asarray(im.resize(target_size, Image.BILINEAR)) for im in log["images"]]
                 arr = np.stack(imgs)  # NHWC
                 tracker.writer.add_images(log["validation_prompt"], arr, step, dataformats="NHWC")
         elif tracker.name == "wandb":
@@ -869,7 +870,7 @@ def main(args):
         eps=args.adam_epsilon,
     )
 
-    train_dataset = UniDataset(anno_path='data/final_captions.txt',index_file= 'data/train_index.txt',
+    train_dataset = UniDataset(anno_path='data/final_captions.txt',index_file= 'data/index_file_vll5.txt',
                      local_type_list= ['r1','r2', 'flow','flow_b'])
     
     train_dataset = TransformedDataset(train_dataset, tokenizer=tokenizer)
