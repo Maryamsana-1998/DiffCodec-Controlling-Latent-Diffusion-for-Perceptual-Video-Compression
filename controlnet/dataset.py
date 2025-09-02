@@ -77,8 +77,6 @@ def adaptive_weighted_downsample(flow, target_h=128, target_w=128):
 
     return output  # shape: (2, target_h, target_w)
 
-
-
 def read_anno(anno_path):
     fi = open(anno_path)
     lines = fi.readlines()
@@ -89,7 +87,6 @@ def read_anno(anno_path):
         file_ids.append(id)
         annos.append(txt)
     return file_ids, annos
-
 
 def keep_and_drop(conditions, keep_all_prob, drop_all_prob, drop_each_prob):
     results = []
@@ -156,19 +153,12 @@ class UniDataset(Dataset):
         return len(self.video_frames)
 
     def __getitem__(self, index):
-        # try:
         img_path = Path(self.video_frames[index])
         sequence_id = f"{img_path.parent.parent.name.zfill(5)}_{img_path.parent.name}"
         anno = self.annos[sequence_id]
 
         image = cv2.imread(str(img_path))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-        # needs to expanded
-        global_files = []
-        for global_type in self.global_type_list:
-            if global_type == 'r2':
-                global_files.append(img_path.with_name('r2.npy'))
 
         local_files = {}
         for local_type in self.local_type_list:
@@ -233,37 +223,29 @@ class UniDataset(Dataset):
             print('no flow used')
             pass
 
-        global_conditions = []
-        for global_file in global_files:
-            condition = np.load(str(global_file))
-            global_conditions.append(condition)
-
         # Drop text or conditions as per policy
         if random.random() < self.drop_txt_prob:
             anno = ""
 
         local_conditions = keep_and_drop(local_conditions, self.keep_all_cond_prob,
                                         self.drop_all_cond_prob, self.drop_each_cond_prob)
-        global_conditions = keep_and_drop(global_conditions, self.keep_all_cond_prob,
-                                        self.drop_all_cond_prob, self.drop_each_cond_prob)
+        
 
-        if len(local_conditions):
-            local_conditions = np.concatenate(local_conditions, axis=2)
-        if len(global_conditions):
-            global_conditions = np.concatenate(global_conditions)
+        if len(local_conditions) > 0:
+            local_conditions = np.concatenate(local_conditions, axis=2)  # [H,W,C_total]
+        else:
+            print('no local conditions used')
+            local_conditions = np.zeros((self.resolution, self.resolution, 6), dtype=np.float32)
+
 
         if local_conditions.shape != (self.resolution, self.resolution,6):
             raise ValueError(f"[ERROR] Condition shape mismatch for '{local_files}': got {local_conditions.shape}, expected (3, {self.resolution}, {self.resolution})")
-
+       
         return {
             'jpg': jpg,
             'txt': anno,
             'local_conditions': local_conditions ,
-            'global_conditions': global_conditions ,
             'flow': flow_conditions
         }
-        # except Exception as e:
-        #     print(f"[SKIP INDEX {index}] due to error: {e}")
-        #     new_index = random.randint(0, len(self.video_frames) - 1)
-        #     return self.__getitem__(new_index)
+
 

@@ -214,3 +214,8 @@ data/Beauty
 experiments/
 slurm*
 data/testing/
+data/test_videos/
+hevc_*
+preds_*
+
+data/*/*
