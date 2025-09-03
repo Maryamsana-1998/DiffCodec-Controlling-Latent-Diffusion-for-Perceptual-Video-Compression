@@ -215,7 +215,6 @@ experiments/
 slurm*
 data/testing/
 data/test_videos/
-hevc_*
-preds_*
+benchmark_results/*/*
 
 data/*/*

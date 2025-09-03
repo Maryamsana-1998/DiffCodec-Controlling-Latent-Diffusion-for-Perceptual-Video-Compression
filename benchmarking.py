@@ -52,7 +52,7 @@ def evaluate_video(original_folder, pred_folder):
 videos = ['Beauty', 'Bosphorus', 'ShakeNDry', 'HoneyBee']
 
 # GOP size and frame info
-gop_size = 2
+gop_size = 4
 height, width = 1024, 1920
 inter_frames_per_video = 48
 
@@ -114,4 +114,4 @@ for video in videos:
     })
 
 # Save results
-np.save('inter_frame_results.npy', results)
+np.save('inter_frame_results_gop4.npy', results)
