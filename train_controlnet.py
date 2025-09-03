@@ -123,25 +123,35 @@ def log_validation(
     dtype = next(pipeline.unet.parameters()).dtype  # keep consistent with UNet
 
     # ---- hard-coded conditioning (your request) ----
-    # Produces tensors on the right device/dtype: cond [1,6,512,512], flow4 [1,4,512,512]
-    cond, flow4 = load_controls_and_flows(
-        "data/Beauty/images/frame_0000.png",
-        "data/Beauty/images/frame_0002.png",
-        "data/Beauty/optical_flow/optical_flow_gop_2_raft/flow_0000_0001.flo",
-        "data/Beauty/optical_flow_bwd/optical_flow_gop_2_raft/flow_0002_0001.flo",
+
+    # Validation data:
+    local_conditions = []
+    flow_conditions = []
+    prompts = ["A beautiful blonde girl smiling with pink lipstick with black background",
+               "A Yacht with a red flag ,sailing in front of the Bosphorus in Istanbul , and bridge with cars is in the background." , 
+               "A German shepherd shakes off water in the middle of a forest trail",
+               "Honeybees hover among blooming purple flowers"]
+
+    videos = ['Beauty', 'Bosphorus', 'ShakeNDry', 'HoneyBee']
+    for video in videos:
+        local,flow = load_controls_and_flows(
+        f'data/{video}/images/frame_0000.png',
+        f'data/{video}/images/frame_0004.png',
+        f'data/{video}/optical_flow/optical_flow_gop_4_raft/flow_0000_0003.flo',
+        f'data/{video}/optical_flow_bwd/optical_flow_gop_4_raft/flow_0004_0003.flo',
         size=(512, 512),
         device=device,
         dtype=dtype,
     )
-
-    prompt = args.validation_prompt[0] if isinstance(args.validation_prompt, (list, tuple)) else args.validation_prompt
-
-    for _ in range(getattr(args, "num_validation_images", 1)):
+        local_conditions.append(local) 
+        flow_conditions.append(flow)
+    image_logs = []
+    for i in range(len(videos)):
         with inference_ctx:
             out = pipeline(
-                prompt=prompt,
-                controlnet_cond=cond,   # [1,6,512,512]
-                flow_cond=flow4,        # [1,4,512,512]
+                prompt=prompts[i],
+                controlnet_cond=local_conditions[i],   # [1,6,512,512]
+                flow_cond=flow_conditions[i],        # [1,4,512,512]
                 height=512,
                 width=512,
                 num_inference_steps=30,
@@ -157,35 +167,59 @@ def log_validation(
 
         images.append(out.images[0])
 
-    try:
-        pil0 = Image.open("data/Beauty/images/frame_0000.png").convert("RGB").resize((512, 512))
-        pil1 = Image.open("data/Beauty/images/frame_0002.png").convert("RGB").resize((512, 512))
-        cond_viz = Image.new("RGB", (1024, 512))
-        cond_viz.paste(pil0, (0, 0))
-        cond_viz.paste(pil1, (512, 0))
-    except Exception:
-        cond_viz = None
+        try:
+            # Inputs
+            pil0 = Image.open(f"data/{videos[i]}/images/frame_0000.png").convert("RGB").resize((512, 512))
+            pil4 = Image.open(f"data/{videos[i]}/images/frame_0004.png").convert("RGB").resize((512, 512))
+            gt   = Image.open(f"data/{videos[i]}/images/frame_0003.png").convert("RGB").resize((512, 512))
 
-    # log to trackers
-    image_logs = [{"validation_image": cond_viz or images[0], "images": images, "validation_prompt": prompt}]
+            # Prediction from pipeline
+            pred = images[i]
+
+            # Build visualization panel [I0 | I4 | Pred | GT]
+            cond_viz = Image.new("RGB", (512 * 4, 512))
+            cond_viz.paste(pil0, (0, 0))
+            cond_viz.paste(pil4, (512, 0))
+            cond_viz.paste(pred, (1024, 0))
+            cond_viz.paste(gt, (1536, 0))
+
+        except Exception as e:
+            logger.warning(f"Visualization failed for {video}: {e}")
+            cond_viz = None
+            gt = None
+            pred = images[i]
+
+        image_logs.append({
+            "video": video,
+            "panel": cond_viz or pred,
+            "prediction": pred,
+            "ground_truth": gt,
+            # "metrics": video_metrics   # optional if you compute metrics
+        })
+
+
     tracker_key = "test" if is_final_validation else "validation"
 
     for tracker in accelerator.trackers:
         target_size = (512, 512)
         if tracker.name == "tensorboard":
             for log in image_logs:
-                imgs = [np.asarray(log["validation_image"].resize(target_size, Image.BILINEAR))] if log["validation_image"] is not None else []
-                imgs += [np.asarray(im.resize(target_size, Image.BILINEAR)) for im in log["images"]]
-                arr = np.stack(imgs)  # NHWC
-                tracker.writer.add_images(log["validation_prompt"], arr, step, dataformats="NHWC")
+                arr = np.asarray(log["panel"].resize((2048, 512), Image.BILINEAR))  # HWC
+                tracker.writer.add_image(f"{log['video']}_panel", arr, step, dataformats="HWC")
+
+                if "metrics" in log:
+                    for k, v in log["metrics"].items():
+                        tracker.writer.add_scalar(f"{log['video']}/{k}", v, step)
+
         elif tracker.name == "wandb":
             formatted = []
             for log in image_logs:
-                if log["validation_image"] is not None:
-                    formatted.append(wandb.Image(log["validation_image"], caption="Control (I0|I1)"))
-                for im in log["images"]:
-                    formatted.append(wandb.Image(im, caption=log["validation_prompt"]))
+                if log["panel"] is not None:
+                    formatted.append(
+                        wandb.Image(log["panel"], caption=f"{log['video']} (I0|I4|Pred|GT)")
+                    )
             tracker.log({tracker_key: formatted})
+
         else:
             logger.warning(f"image logging not implemented for {tracker.name}")
 
