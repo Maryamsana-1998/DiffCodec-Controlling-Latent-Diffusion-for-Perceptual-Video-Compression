@@ -6,7 +6,7 @@ from typing import Optional, Tuple, Union, List
 from diffusers.models.controlnets.controlnet import ControlNetModel
 
 # replace this with your own import
-from softsplat import softsplat  
+from controlnet.softsplat import softsplat  
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -14,6 +14,15 @@ def zero_module(module):
     for p in module.parameters():
         nn.init.zeros_(p)
     return module
+
+
+def compute_mask(flow_bwd_tensor, flow_fwd_tensor):
+    metric = torch.ones_like(flow_fwd_tensor[:, :1])
+    with torch.cuda.amp.autocast(enabled=False):
+        warped_bwd = softsplat(tenIn=flow_bwd_tensor, tenFlow=flow_fwd_tensor, tenMetric=metric, strMode='soft')
+    flow_diff = flow_fwd_tensor + warped_bwd
+    occ_mask = (torch.norm(flow_diff, p=2, dim=1, keepdim=True) > 0.3).float()
+    return occ_mask
 
 class FDN(nn.Module):
     def __init__(self, norm_nc, label_nc):
@@ -68,7 +77,7 @@ class FeatureWarperSoftsplat(nn.Module):
         if mask!= None:
              warped = warped*(1-mask)
              
-        return warped
+        return warped, metric
 
 def resize_and_normalize_flow_batched(flow_tensor: torch.Tensor, target_h: int, target_w: int) -> torch.Tensor:
     """
@@ -100,6 +109,8 @@ class Bi_Dir_FeatureExtractor(nn.Module):
 
     def __init__(self, inject_channels):
         super().__init__()
+        self.inject = inject_channels
+        self.split_res = [int(i/2) for i in self.inject]
         self.first_pre_extractor = nn.Sequential(
             nn.Conv2d(3, 16, 3, padding=1),
             nn.SiLU(),
@@ -124,7 +135,11 @@ class Bi_Dir_FeatureExtractor(nn.Module):
             nn.Conv2d(64, 64, 3, padding=1),
             nn.SiLU(),
         )
-        self.wrapper = FeatureWarperSoftsplat()
+        self.wrapper = nn.ModuleList([FeatureWarperSoftsplat(with_learnable_metric=True,in_channels=self.split_res[0]), 
+                        FeatureWarperSoftsplat(with_learnable_metric=True,in_channels=self.split_res[1]),
+                        FeatureWarperSoftsplat(with_learnable_metric=True,in_channels=self.split_res[2]),
+                        FeatureWarperSoftsplat(with_learnable_metric=True,in_channels=self.split_res[3])])
+        
         self.extractors_first = nn.ModuleList([
             nn.Sequential(nn.Conv2d(64, int(inject_channels[0] / 2), 3, padding=1, stride=2), nn.SiLU()),
             nn.Sequential(nn.Conv2d(int(inject_channels[0] / 2), int(inject_channels[1] / 2), 3, padding=1, stride=2), nn.SiLU()),
@@ -139,10 +154,10 @@ class Bi_Dir_FeatureExtractor(nn.Module):
         ])
 
         self.zero_convs = nn.ModuleList([
-            zero_module(nn.Conv2d(inject_channels[0], inject_channels[0], 3, padding=1)),
-            zero_module(nn.Conv2d(inject_channels[1], inject_channels[1], 3, padding=1)),
-            zero_module(nn.Conv2d(inject_channels[2], inject_channels[2], 3, padding=1)),
-            zero_module(nn.Conv2d(inject_channels[3], inject_channels[3], 3, padding=1))
+            zero_module(nn.Conv2d(inject_channels[0]//2, inject_channels[0], 3, padding=1)),
+            zero_module(nn.Conv2d(inject_channels[1]//2, inject_channels[1], 3, padding=1)),
+            zero_module(nn.Conv2d(inject_channels[2]//2, inject_channels[2], 3, padding=1)),
+            zero_module(nn.Conv2d(inject_channels[3]//2, inject_channels[3], 3, padding=1))
         ])
     
     def forward(self, local_conditions, flow):
@@ -151,8 +166,6 @@ class Bi_Dir_FeatureExtractor(nn.Module):
         last_frame = local_conditions[:,:3]
         flow_fwd = flow[:,:2]
         flow_bwd = flow[:,2:]
-
-        # print('print shapes:',first_frame.shape, last_frame.shape, flow_fwd.shape,flow_bwd.shape)
 
         first_features = self.first_pre_extractor(first_frame)
         last_features = self.last_pre_extractor(last_frame)
@@ -164,21 +177,41 @@ class Bi_Dir_FeatureExtractor(nn.Module):
         flow_res = [64,32,16, 8]
 
         for idx in range(len(self.extractors_first)):
-
+            # Extract features
             first_features = self.extractors_first[idx](first_features)
-            last_features = self.extractors_last[idx](last_features)
+            last_features  = self.extractors_last[idx](last_features)
 
-            flow = resize_and_normalize_flow_batched(flow_fwd, target_h=flow_res[idx], target_w=flow_res[idx])
-            flow_b = resize_and_normalize_flow_batched(flow_bwd, target_h=flow_res[idx], target_w=flow_res[idx])
+            # Resize flows
+            flow_f = resize_and_normalize_flow_batched(flow_fwd, flow_res[idx], flow_res[idx])
+            flow_b = resize_and_normalize_flow_batched(flow_bwd, flow_res[idx], flow_res[idx])
 
-            wrapped_first = self.wrapper(first_features, flow)
-            wrapped_last = self.wrapper(last_features,flow_b)
+            # Occlusion masks
+            occ_fwd = compute_mask(flow_f, flow_b)
+            occ_bwd = compute_mask(flow_b, flow_f)
 
-            local_features = torch.cat([wrapped_first,wrapped_last],dim=1)
-            # print('local shape', local_features.shape)
+            # Warp both sides
+            warped_first, conf_fwd = self.wrapper[idx](first_features, flow_f, mask=occ_fwd)
+            warped_last,  conf_bwd = self.wrapper[idx](last_features,  flow_b, mask=occ_bwd)
 
-            out_features = self.zero_convs[idx](local_features)
-            output_features.append(out_features)
+            # === Fusion step (soft_fuse logic) ===
+            eps = 1e-6
+            conf = torch.cat([conf_fwd, conf_bwd], dim=1)   # [B,2,H,W]
+            conf = torch.clamp(conf, min=0)
+            w_sum = conf.sum(dim=1, keepdim=True) + eps
+            w_norm = conf / w_sum
+
+            fused = w_norm[:, :1] * warped_first + w_norm[:, 1:] * warped_last
+
+            # Handle double holes (both invalid)
+            holes = (occ_fwd + occ_bwd) > 1.5   # both occluded
+            if holes.any():
+                avg = 0.5 * (warped_first + warped_last)
+                fused = torch.where(holes.expand_as(fused), avg, fused)
+
+            # Final conv after fusion
+            output_feature = self.zero_convs[idx](fused)
+            output_features.append(output_feature)
+
         return output_features
 
 class DualFlowControlNet(ControlNetModel):
@@ -219,15 +252,6 @@ class DualFlowControlNet(ControlNetModel):
         self.fdn16 = FDN(norm_nc=C16,  label_nc=C16)   # e.g., C16=1280
         self.fdn08 = FDN(norm_nc=C08,  label_nc=C08)   # e.g., C08=1280
 
-        # self.zero_convs = nn.ModuleList([
-        #     zero_module(nn.Conv2d(C64, C64, 1)),
-        #     zero_module(nn.Conv2d(C32, C32, 1)),
-        #     zero_module(nn.Conv2d(C16, C16, 1)),
-        #     zero_module(nn.Conv2d(C08, C08, 1)),
-        # ])
-
-
-
 
     # ---------- main forward ----------
     def forward(
@@ -263,15 +287,7 @@ class DualFlowControlNet(ControlNetModel):
 
         # ---- mirrored ControlNet path with injections ----
         sample = self.conv_in(sample)            # [B, 320, 64, 64]
-
-        # print('sample ', torch.std(sample), torch.mean(sample))
-
-        # print(torch.std(P64), torch.mean(P64))
         sample = self.fdn64(sample, P64) 
-
-        # print('sample after fdn64 ', torch.std(sample), torch.mean(sample))
-        # sample = sample + self.zero_convs[0](P64)  # additive residual  
-        sample = sample + P64
         
         down_block_res_samples: Tuple[torch.Tensor, ...] = (sample,)
         for i, down_block in enumerate(self.down_blocks,):
@@ -288,20 +304,13 @@ class DualFlowControlNet(ControlNetModel):
             if i == 0:
                 # print('add 32')
                 sample = self.fdn32(sample, P32)
-                # sample = sample + self.zero_convs[1](P32)
-                sample = sample + P32
             elif i == 1:
                 # print('add 16')
                 sample = self.fdn16(sample, P16)
-                # sample = sample + self.zero_convs[2](P16)
-                sample = sample + P16
             else:
                 # print('add 08')
                 sample = self.fdn08(sample, P08)
-                # sample = sample + self.zero_convs[3](P08)
-                sample = sample + P08
-
-                
+           
             down_block_res_samples += res_samples
 
 

@@ -44,7 +44,7 @@ from transformers import AutoTokenizer, PretrainedConfig
 from controlnet.dataset import UniDataset
 from controlnet.lpips_loss import NormFixLPIPS
 from controlnet.edge_loss import SobelEdgeLoss
-
+from safetensors.torch import load_file
 import diffusers
 from diffusers import (
     AutoencoderKL,
@@ -118,11 +118,13 @@ def log_validation(
   
 
     images = []
-    inference_ctx = contextlib.nullcontext() if is_final_validation else torch.autocast("cuda")
+    inference_ctx = contextlib.nullcontext() 
+    
     # device & dtype for controls
     device = accelerator.device
+   
     dtype = next(pipeline.unet.parameters()).dtype  # keep consistent with UNet
-
+    print(dtype, 'inference dtype')
     # ---- hard-coded conditioning (your request) ----
 
     # Validation data:
@@ -147,6 +149,7 @@ def log_validation(
         local_conditions.append(local) 
         flow_conditions.append(flow)
     image_logs = []
+
     for i in range(len(videos)):
         with inference_ctx:
             out = pipeline(
@@ -209,7 +212,7 @@ def log_validation(
 
         
         image_logs.append({
-            "video": video,
+            "video": videos[i],
             "panel": cond_viz or pred,
             "prediction": pred,
             "ground_truth": gt,
@@ -384,7 +387,7 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--checkpointing_steps",
         type=int,
-        default=500,
+        default=1000,
         help=(
             "Save a checkpoint of the training state every X updates. Checkpoints can be used for resuming training via `--resume_from_checkpoint`. "
             "In the case that the checkpoint is better than the final trained model, the checkpoint can also be used for inference."
@@ -810,17 +813,23 @@ def main(args):
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision, variant=args.variant
     )
 
-    # if args.controlnet_model_name_or_path:
-    #     logger.info("Loading existing controlnet weights")
-    #     # controlnet = ControlNetModel.from_pretrained(args.controlnet_model_name_or_path,conditioning_channels=6)
-    # else:
-    #     logger.info("Initializing controlnet weights from unet")
-    #     # controlnet = ControlNetModel.from_unet(unet,conditioning_channels=6)
 
     controlnet = DualFlowControlNet(
                     block_out_channels=tuple(unet.config.block_out_channels),     # (320, 640, 1280, 1280)
                     layers_per_block=2,
                     cross_attention_dim=768,)
+    
+    if args.controlnet_model_name_or_path:
+        logger.info("Loading existing controlnet weights")
+        ckpt = load_file(args.controlnet_model_name_or_path)
+        model_state = controlnet.state_dict()
+
+        # Filter only matching keys with same shape
+        filtered_state_dict = {
+        k: v for k, v in ckpt.items()
+        if k in model_state and v.shape == model_state[k].shape
+        }
+        controlnet.load_state_dict(filtered_state_dict ,strict=False)
 
     # Taken from [Sayak Paul's Diffusers PR #6511](https://github.com/huggingface/diffusers/pull/6511/files)
     def unwrap_model(model):
