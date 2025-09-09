@@ -218,3 +218,5 @@ data/test_videos/
 benchmark_results/*/*
 
 data/*/*
+
+benchmark_results/*.svg

@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers import DiffusionPipeline
 from diffusers.image_processor import VaeImageProcessor
-from flownet import DualFlowControlNet
+from controlnet.flownet import DualFlowControlNet
 from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection
 from diffusers.pipelines.controlnet.pipeline_controlnet import StableDiffusionControlNetPipeline
 from diffusers.models import AutoencoderKL,  UNet2DConditionModel
