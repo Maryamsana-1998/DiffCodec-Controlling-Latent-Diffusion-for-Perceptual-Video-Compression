@@ -22,9 +22,10 @@ import os
 import random
 import shutil
 from pathlib import Path
-from utils import load_controls_and_flows,get_pred_original_sample
+from controlnet.utils import load_controls_and_flows,get_pred_original_sample
 import accelerate
 import numpy as np
+from pytorch_msssim import ms_ssim
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -40,9 +41,9 @@ from PIL import Image
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
-from dataset import UniDataset
-from lpips_loss import NormFixLPIPS
-from edge_loss import SobelEdgeLoss
+from controlnet.dataset import UniDataset
+from controlnet.lpips_loss import NormFixLPIPS
+from controlnet.edge_loss import SobelEdgeLoss
 
 import diffusers
 from diffusers import (
@@ -57,7 +58,7 @@ from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.hub_utils import load_or_create_model_card, populate_model_card
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
-from flownet import DualFlowControlNet
+from controlnet.flownet import DualFlowControlNet
 from pipeline import StableDiffusionDualFlowControlNetPipeline
 
 if is_wandb_available():
@@ -167,8 +168,9 @@ def log_validation(
 
         images.append(out.images[0])
 
+        
         try:
-            # Inputs
+             # Inputs
             pil0 = Image.open(f"data/{videos[i]}/images/frame_0000.png").convert("RGB").resize((512, 512))
             pil4 = Image.open(f"data/{videos[i]}/images/frame_0004.png").convert("RGB").resize((512, 512))
             gt   = Image.open(f"data/{videos[i]}/images/frame_0003.png").convert("RGB").resize((512, 512))
@@ -183,20 +185,36 @@ def log_validation(
             cond_viz.paste(pred, (1024, 0))
             cond_viz.paste(gt, (1536, 0))
 
+            # --- Calculate MS-SSIM and PSNR ---
+            pred_tensor = torch.from_numpy(np.array(pred).transpose(2,0,1)).float() / 255.0
+            gt_tensor   = torch.from_numpy(np.array(gt).transpose(2,0,1)).float() / 255.0
+            pred_tensor = pred_tensor.unsqueeze(0)  # [1,C,H,W]
+            gt_tensor   = gt_tensor.unsqueeze(0)
+
+            ms_ssim_val = ms_ssim(pred_tensor, gt_tensor, data_range=1.0, size_average=True).item()
+            mse = F.mse_loss(pred_tensor, gt_tensor).item()
+            psnr_val = 10 * np.log10(1.0 / mse) if mse != 0 else float('inf')
+
+            metrics = {
+                "MS-SSIM": ms_ssim_val,
+                "PSNR": psnr_val
+            }
+
         except Exception as e:
-            logger.warning(f"Visualization failed for {video}: {e}")
+            print('Failed to load Image log.', e)
+            logger.warning(f'Visualization failed for {video}: {e}')
             cond_viz = None
             gt = None
             pred = images[i]
 
+        
         image_logs.append({
             "video": video,
             "panel": cond_viz or pred,
             "prediction": pred,
             "ground_truth": gt,
-            # "metrics": video_metrics   # optional if you compute metrics
+            "metrics": metrics
         })
-
 
     tracker_key = "test" if is_final_validation else "validation"
 
@@ -205,11 +223,14 @@ def log_validation(
         if tracker.name == "tensorboard":
             for log in image_logs:
                 arr = np.asarray(log["panel"].resize((2048, 512), Image.BILINEAR))  # HWC
-                tracker.writer.add_image(f"{log['video']}_panel", arr, step, dataformats="HWC")
+                # ✅ unique tag per video under validation/test namespace
+                tracker.writer.add_image(
+                    f"{tracker_key}/{log['video']}_panel", arr, step, dataformats="HWC"
+                )
 
                 if "metrics" in log:
                     for k, v in log["metrics"].items():
-                        tracker.writer.add_scalar(f"{log['video']}/{k}", v, step)
+                        tracker.writer.add_scalar(f"{tracker_key}/{log['video']}/{k}", v, step)
 
         elif tracker.name == "wandb":
             formatted = []

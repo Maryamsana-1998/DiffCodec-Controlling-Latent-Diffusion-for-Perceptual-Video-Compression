@@ -1,12 +1,17 @@
-import os
-import random
+import torch
 import cv2
 import numpy as np
-from torch.utils.data import Dataset
 from pathlib import Path
+import torchvision.transforms as T
+import torch.nn.functional as F
+import random
 import albumentations as A
-import torch
+from torch.utils.data import Dataset
 import struct
+
+
+# ---------- helpers ----------
+
 
 def load_flo_file(file_path):
     with open(file_path, 'rb') as f:
@@ -37,74 +42,26 @@ def load_caption_dict(txt_path):
     return caption_dict
 
 
-def normalize_for_warping(flow):
-    h, w = flow.shape[1:]
-    flow[..., 1] /= (w / 2)
-    flow[..., 2] /= (h / 2)
-    return flow  # [2, H, W]
 
-def adaptive_weighted_downsample(flow, target_h=128, target_w=128):
-    """
-    Args:
-        flow: np.ndarray of shape (2, H, W)
-    Returns:
-        output: np.ndarray of shape (2, target_h, target_w)
-    """
-    C, H, W = flow.shape
-    assert C == 2, "Flow must have shape (2, H, W)"
+def fast_downsample_flow(flow, target_h=128, target_w=128):
+    """Vectorized flow downsampling using PyTorch adaptive pooling."""
+    if isinstance(flow, np.ndarray):
+        flow = torch.from_numpy(flow)
+    if flow.ndim == 3:  # [2,H,W]
+        flow = flow.unsqueeze(0)  # [1,2,H,W]
+    flow_ds = F.adaptive_avg_pool2d(flow.float(), (target_h, target_w))
+    return flow_ds.squeeze(0).numpy()  # back to np [2,h,w]
 
-    output = np.zeros((2, target_h, target_w), dtype=np.float32)
-
-    # Compute bounds of each block
-    h_bounds = np.linspace(0, H, target_h + 1, dtype=int)
-    w_bounds = np.linspace(0, W, target_w + 1, dtype=int)
-
-    for i in range(target_h):
-        for j in range(target_w):
-            h_start, h_end = h_bounds[i], h_bounds[i + 1]
-            w_start, w_end = w_bounds[j], w_bounds[j + 1]
-
-            block = flow[:, h_start:h_end, w_start:w_end]  # shape: (2, h, w)
-            flat = block.reshape(2, -1)  # shape: (2, N)
-
-            mag = np.linalg.norm(flat, axis=0)  # shape: (N,)
-            if mag.sum() > 0:
-                weighted_avg = (flat * mag).sum(axis=1) / (mag.sum() + 1e-6)
-            else:
-                weighted_avg = flat.mean(axis=1)
-
-            output[:, i, j] = weighted_avg
-
-    return output  # shape: (2, target_h, target_w)
-
-def read_anno(anno_path):
-    fi = open(anno_path)
-    lines = fi.readlines()
-    fi.close()
-    file_ids, annos = [], []
-    for line in lines:
-        id, txt = line.split('\t')
-        file_ids.append(id)
-        annos.append(txt)
-    return file_ids, annos
-
-def keep_and_drop(conditions, keep_all_prob, drop_all_prob, drop_each_prob):
-    results = []
-    seed = random.random()
-    if seed < keep_all_prob:
-        results = conditions
-    elif seed < keep_all_prob + drop_all_prob:
-        for condition in conditions:
-            results.append(np.zeros(condition.shape))
+def load_flow_cached(path, target_h=128, target_w=128):
+    """Load pre-saved .npy flow if exists, otherwise fall back to .flo"""
+    npy_path = str(path).replace(".flo", ".npy")
+    if Path(npy_path).exists():
+        flow = np.load(npy_path)
     else:
-        for i in range(len(conditions)):
-            if random.random() < drop_each_prob[i]:
-                results.append(np.zeros(conditions[i].shape))
-            else:
-                results.append(conditions[i])
-    return results
+        flow = load_flo_file(path)   # your old loader
+    return fast_downsample_flow(flow, target_h, target_w)
 
-
+# ---------- dataset ----------
 class UniDataset(Dataset):
     def __init__(self,
                  anno_path,
@@ -113,8 +70,8 @@ class UniDataset(Dataset):
                  resolution=512,
                  drop_txt_prob=0.3,
                  global_type_list=[],
-                 keep_all_cond_prob =0.9,
-                 drop_all_cond_prob= 0.3,
+                 keep_all_cond_prob=0.9,
+                 drop_all_cond_prob=0.3,
                  drop_each_cond_prob=[0.3,0.3],
                  transform=True):
 
@@ -128,9 +85,8 @@ class UniDataset(Dataset):
         self.transform = transform
         self.annos = load_caption_dict(anno_path)
 
-        with open(index_file, 'r') as f:
+        with open(index_file, "r") as f:
             self.video_frames = f.read().splitlines()
-
 
         self.aug_targets ={}
         # Albumentations key remapping
@@ -151,15 +107,19 @@ class UniDataset(Dataset):
 
     def __len__(self):
         return len(self.video_frames)
-
     def __getitem__(self, index):
         img_path = Path(self.video_frames[index])
         sequence_id = f"{img_path.parent.parent.name.zfill(5)}_{img_path.parent.name}"
-        anno = self.annos[sequence_id]
+        anno = self.annos.get(sequence_id, "")
 
+        # --- load main RGB ---
         image = cv2.imread(str(img_path))
+        if image is None:
+            raise ValueError(f"Missing jpg at {img_path}")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = cv2.resize(image, (self.resolution, self.resolution))
 
+        # --- local conditions (r1, r2, depth) ---
         local_files = {}
         for local_type in self.local_type_list:
             if local_type == 'r1':
@@ -167,85 +127,68 @@ class UniDataset(Dataset):
             elif local_type == 'r2':
                 local_files['r2'] = img_path.with_name('r2.png')
             elif local_type == 'depth':
-                local_files['depth'] = img_path.parent / 'depth' / img_path.name.replace('.png', '_depth.png')
-            elif local_type == 'flow':
-                local_files['flow'] = img_path.parent / 'Flow' / img_path.name.replace('.png', '.flo')
-            elif local_type == 'flow_b':
-                local_files['flow_b'] = img_path.parent / 'Flow_b' / img_path.name.replace('.png', '.flo')
+                local_files['depth'] = img_path.parent / "depth" / img_path.name.replace(".png", "_depth.png")
 
-        # Prepare inputs for augmentation
+        # Prepare inputs for augmentation — ensure SAME size for all
         image_inputs = {'image': image}
-        for key in local_files.keys():
-            path = local_files.get(key, None)
-            if key not in ['flow','flow_b'] and path.exists():
+        for key, path in local_files.items():
+            if path.exists():
                 img = cv2.imread(str(path))
                 if img is None:
                     raise ValueError(f"[INVALID IMAGE] Could not load {path}")
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, (self.resolution, self.resolution))
                 image_inputs[key] = img
 
         # Apply augmentation
         if self.transform:
             augmented = self.augmentation(**image_inputs)
-            # print('aug done')
         else:
-            augmented = {k: cv2.resize(v, (self.resolution, self.resolution)) for k, v in image_inputs.items()}
+            augmented = image_inputs
 
-        # Normalize and prepare outputs
-        jpg = augmented['image']
-        jpg = cv2.resize(jpg, (self.resolution, self.resolution))
-        jpg = (jpg.astype(np.float32) / 127.5) - 1.0  # Normalize to [-1, 1]
+        # Normalize jpg
+        jpg = augmented['image'].astype(np.float32)
+        jpg = (jpg / 127.5) - 1.0  # [-1,1]
 
+        # Normalize local conditions
         local_conditions = []
-        for k in ['r1','r2','depth']:
+        for k in ['r1', 'r2', 'depth']:
             if k in augmented:
-                cond = cv2.resize(augmented[k], (self.resolution, self.resolution))
-                cond = cond.astype(np.float32) / 255.0
+                cond = augmented[k].astype(np.float32) / 255.0
                 local_conditions.append(cond)
 
-        # Handle flow (resize + normalize only)
-        flow_conditions = []
-        flow, flow_b = None,None
-        if 'flow' in local_files and local_files['flow'].exists():
-            flow = load_flo_file(local_files['flow'])
-            flow = adaptive_weighted_downsample(flow, target_h=256, target_w=256)
-
-
-        if 'flow_b' in local_files and local_files['flow_b'].exists():
-            flow_b = load_flo_file(local_files['flow_b'])
-            flow_b = adaptive_weighted_downsample(flow_b, target_h=256, target_w=256)
-
-        if flow is not None and flow_b is not None:
-            flow_conditions = np.concatenate([flow,flow_b])
-        elif flow is not None:
-            flow_conditions = normalize_for_warping(flow)
+        if local_conditions:
+            local_conditions = np.concatenate(local_conditions, axis=2)  # [H,W,C]
         else:
-            print('no flow used')
-            pass
+            print(f"[WARN] No local conditions for {img_path}, using zeros")
+            local_conditions = np.zeros((self.resolution, self.resolution, 6), dtype=np.float32)
 
-        # Drop text or conditions as per policy
+        # --- flow conditions ---
+        flow_conditions = []
+        if "flow" in self.local_type_list:
+            flow_path = img_path.parent / "Flow" / img_path.name.replace(".png", ".flo")
+            if flow_path.exists():
+                flow_conditions = load_flow_cached(flow_path, 256, 256)
+        if "flow_b" in self.local_type_list:
+            flow_b_path = img_path.parent / "Flow_b" / img_path.name.replace(".png", ".flo")
+            if flow_b_path.exists():
+                flow_b = load_flow_cached(flow_b_path, 256, 256)
+                if isinstance(flow_conditions, np.ndarray) and flow_conditions.size > 0:
+                    flow_conditions = np.concatenate([flow_conditions, flow_b], axis=0)
+                else:
+                    flow_conditions = flow_b
+
+        if isinstance(flow_conditions, list) or flow_conditions == []:
+            print(f"[WARN] Missing flow for {img_path}, using zeros")
+            flow_conditions = np.zeros((4, 256, 256), dtype=np.float32)
+
+        # --- text dropout ---
         if random.random() < self.drop_txt_prob:
             anno = ""
 
-        local_conditions = keep_and_drop(local_conditions, self.keep_all_cond_prob,
-                                        self.drop_all_cond_prob, self.drop_each_cond_prob)
-        
-
-        if len(local_conditions) > 0:
-            local_conditions = np.concatenate(local_conditions, axis=2)  # [H,W,C_total]
-        else:
-            print('no local conditions used')
-            local_conditions = np.zeros((self.resolution, self.resolution, 6), dtype=np.float32)
-
-
-        if local_conditions.shape != (self.resolution, self.resolution,6):
-            raise ValueError(f"[ERROR] Condition shape mismatch for '{local_files}': got {local_conditions.shape}, expected (3, {self.resolution}, {self.resolution})")
-       
         return {
-            'jpg': jpg,
-            'txt': anno,
-            'local_conditions': local_conditions ,
-            'flow': flow_conditions
+            "jpg": jpg,                        # [H,W,3], float32
+            "txt": anno,
+            "local_conditions": local_conditions, # [H,W,6]
+            "flow": flow_conditions             # [2,256,256] or [4,256,256]
         }
-
-
