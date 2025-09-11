@@ -49,7 +49,7 @@ assert unet.config.cross_attention_dim == text_encoder.config.hidden_size == 768
 if hasattr(controlnet, "config") and hasattr(controlnet.config, "cross_attention_dim"):
     assert controlnet.config.cross_attention_dim == 768, f"ControlNet CAD={controlnet.config.cross_attention_dim}"
 
-ckpt = load_file('experiments/controlnet/checkpoint-153000/controlnet/diffusion_pytorch_model.safetensors')
+ckpt = load_file('experiments/controlnet/checkpoint-46000/controlnet/diffusion_pytorch_model.safetensors')
 controlnet.load_state_dict(ckpt,strict=False)
 
 safety_checker = None
@@ -99,15 +99,15 @@ spacing = 20
 img_size = 512
 # --- 2. Define Experiment Parameters ---
 # Define the scales you want to test
-controlnet_scales = [1.0, 1.35, 1.7]
-guidance_scales = [3.5, 5.5, 7.5]
+controlnet_scales = [ 1.35, 1.7]
+guidance_scales = [3.5, 5.5]
 
 # Enable FreeU for enhanced quality
 pipe.enable_freeu(s1=0.9, s2=0.2, b1=1.2, b2=1.4)
 img_size = 512
 
 # Create a directory to save the results
-output_dir = "benchmark_results/scale_experiment"
+output_dir = "benchmark_results/scale_experiment2"
 os.makedirs(output_dir, exist_ok=True)
 
 
