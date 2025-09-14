@@ -221,12 +221,13 @@ class ResidueDataset(Dataset):
 
         # 2. Extract the first image and first flow
         # Assuming they are concatenated on the channel axis
-        image1 = torch.from_numpy(local_conditions[:,:,:3]).permute(2,1,0).unsqueeze(0) # Shape: (3, 512, 512,)
-        image2 = torch.from_numpy(local_conditions[:,:,3:]).permute(2,1,0).unsqueeze(0)
+        image1 = torch.from_numpy(local_conditions[:,:,:3]).permute(2,1,0).unsqueeze(0).to('cuda')
+        # Shape: (3, 512, 512,)
+        image2 = torch.from_numpy(local_conditions[:,:,3:]).permute(2,1,0).unsqueeze(0).to('cuda')
         #reshape image to 1,3,256,256 
         
-        flow1 = torch.from_numpy(flow_conditions[:2]).unsqueeze(0)   # Shape: (2, 256, 256, )
-        flow2 = torch.from_numpy(flow_conditions[2:]).unsqueeze(0)
+        flow1 = torch.from_numpy(flow_conditions[:2]).unsqueeze(0).to('cuda')   # Shape: (2, 256, 256, )
+        flow2 = torch.from_numpy(flow_conditions[2:]).unsqueeze(0).to('cuda')
         #reshape 1,2,256,256
 
         metric = torch.ones_like(flow1[:, :1]).to('cuda') # shape: [B, 1, H, W]
@@ -265,11 +266,11 @@ class ResidueDataset(Dataset):
         
         # 5. Return the new, processed sample
         processed_sample = {
-            'warped_image': fused,
-            'flow': original_sample['flow'], # Passing the original concatenated flow
-            'txt': original_sample['txt'],
+            'warped_image': fused.squeeze(0) ,
+            'flow': original_sample['flow'] , # Passing the original concatenated flow
+            'txt': original_sample['txt'] ,
             'local_conditions': original_sample['local_conditions'],
-            'residual': residual,
+            'residual': residual.squeeze(0) ,
         }
         
         return processed_sample
