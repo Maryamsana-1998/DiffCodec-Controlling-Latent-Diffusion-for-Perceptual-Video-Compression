@@ -1,0 +1,29 @@
+{
+  "2": {
+    "Beauty": 0.011795,
+    "Bosphorus": 0.026755,
+    "HoneyBee": 0.04084,
+    "YachtRide": 0.03554,
+    "ReadySteadyGo": 0.048234,
+    "ShakeNDry": 0.040398,
+    "Jockey": 0.026899
+  },
+  "4": {
+    "Beauty": 0.005898,
+    "Bosphorus": 0.013377,
+    "HoneyBee": 0.02042,
+    "YachtRide": 0.01777,
+    "ReadySteadyGo": 0.024117,
+    "ShakeNDry": 0.020199,
+    "Jockey": 0.013449
+  },
+  "8": {
+    "Beauty": 0.002949,
+    "Bosphorus": 0.006689,
+    "HoneyBee": 0.01021,
+    "YachtRide": 0.008885,
+    "ReadySteadyGo": 0.012059,
+    "ShakeNDry": 0.010099,
+    "Jockey": 0.006725
+  }
+}

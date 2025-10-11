@@ -1,0 +1,29 @@
+{
+  "flow_sparse_fwd": {
+    "Beauty": 0.9052966889880952,
+    "Bosphorus": 0.7482096354166666,
+    "HoneyBee": 0.6360677083333334,
+    "YachtRide": 0.7373511904761905,
+    "ReadySteadyGo": 0.6877325148809523,
+    "ShakeNDry": 0.5464099702380952,
+    "Jockey": 0.7383742559523809
+  },
+  "flow_sparse_bwd": {
+    "Beauty": 1.0055338541666667,
+    "Bosphorus": 0.7424897693452381,
+    "HoneyBee": 0.6147693452380952,
+    "YachtRide": 0.9281296502976191,
+    "ReadySteadyGo": 0.70947265625,
+    "ShakeNDry": 0.5446661086309523,
+    "Jockey": 0.7895740327380952
+  },
+  "intra_frame": {
+    "Beauty": 5.971354166666667,
+    "Bosphorus": 13.5446875,
+    "HoneyBee": 20.6753125,
+    "YachtRide": 17.991979166666667,
+    "ReadySteadyGo": 24.41854166666667,
+    "ShakeNDry": 20.45125,
+    "Jockey": 13.6175
+  }
+}

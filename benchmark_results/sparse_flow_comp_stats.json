@@ -1,0 +1,114 @@
+[
+  {
+    "video": "Beauty",
+    "direction": "optical_flow",
+    "int8_size": 1222,
+    "fp16_size": 2524,
+    "original_size": 2097164,
+    "sampled_points": 209
+  },
+  {
+    "video": "Beauty",
+    "direction": "optical_flow_bwd",
+    "int8_size": 1082,
+    "fp16_size": 2027,
+    "original_size": 2097164,
+    "sampled_points": 137
+  },
+  {
+    "video": "Bosphorus",
+    "direction": "optical_flow",
+    "int8_size": 950,
+    "fp16_size": 2137,
+    "original_size": 2097164,
+    "sampled_points": 162
+  },
+  {
+    "video": "Bosphorus",
+    "direction": "optical_flow_bwd",
+    "int8_size": 708,
+    "fp16_size": 1535,
+    "original_size": 2097164,
+    "sampled_points": 80
+  },
+  {
+    "video": "Jockey",
+    "direction": "optical_flow",
+    "int8_size": 781,
+    "fp16_size": 1553,
+    "original_size": 2097164,
+    "sampled_points": 77
+  },
+  {
+    "video": "Jockey",
+    "direction": "optical_flow_bwd",
+    "int8_size": 885,
+    "fp16_size": 1720,
+    "original_size": 2097164,
+    "sampled_points": 102
+  },
+  {
+    "video": "HoneyBee",
+    "direction": "optical_flow",
+    "int8_size": 556,
+    "fp16_size": 1950,
+    "original_size": 2097164,
+    "sampled_points": 126
+  },
+  {
+    "video": "HoneyBee",
+    "direction": "optical_flow_bwd",
+    "int8_size": 740,
+    "fp16_size": 1907,
+    "original_size": 2097164,
+    "sampled_points": 127
+  },
+  {
+    "video": "ReadySteadyGo",
+    "direction": "optical_flow",
+    "int8_size": 536,
+    "fp16_size": 2256,
+    "original_size": 2097164,
+    "sampled_points": 168
+  },
+  {
+    "video": "ReadySteadyGo",
+    "direction": "optical_flow_bwd",
+    "int8_size": 1169,
+    "fp16_size": 2832,
+    "original_size": 2097164,
+    "sampled_points": 259
+  },
+  {
+    "video": "ShakeNDry",
+    "direction": "optical_flow",
+    "int8_size": 556,
+    "fp16_size": 1820,
+    "original_size": 2097164,
+    "sampled_points": 108
+  },
+  {
+    "video": "ShakeNDry",
+    "direction": "optical_flow_bwd",
+    "int8_size": 564,
+    "fp16_size": 2369,
+    "original_size": 2097164,
+    "sampled_points": 189
+  },
+  {
+    "video": "YachtRide",
+    "direction": "optical_flow",
+    "int8_size": 733,
+    "fp16_size": 1498,
+    "original_size": 2097164,
+    "sampled_points": 64
+  },
+  {
+    "video": "YachtRide",
+    "direction": "optical_flow_bwd",
+    "int8_size": 779,
+    "fp16_size": 1469,
+    "original_size": 2097164,
+    "sampled_points": 63
+  }
+]
