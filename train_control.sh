@@ -27,9 +27,9 @@ accelerate launch --num_processes 8 train_controlnet.py \
  --train_batch_size=1 \
  --gradient_accumulation_steps=4 \
  --num_train_epochs=500 \
- --controlnet_model_name_or_path "experiments/checkpoint-153000/controlnet/diffusion_pytorch_model.safetensors" \
+ --controlnet_model_name_or_path "experiments/controlnet/checkpoint-97000/controlnet/diffusion_pytorch_model.safetensors" \
  --logging_dir "logs" \
  --report_to tensorboard \
- --perceptual_weight 0.075 \
- --edge_weight 0.025 \
+ --perceptual_weight 0.125 \
+ --edge_weight 0.05 \
  --enable_xformers_memory_efficient_attention 
