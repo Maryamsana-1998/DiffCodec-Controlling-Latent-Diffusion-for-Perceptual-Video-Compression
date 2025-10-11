@@ -12,7 +12,7 @@ from diffusers import DDPMScheduler, UNet2DModel
 
 from controlnet.dataset import UniDataset
 from controlnet.softsplat import softsplat
-from residual_utils import *
+from controlnet.residual_utils import *
 
 # -------------------------------
 # Setup
