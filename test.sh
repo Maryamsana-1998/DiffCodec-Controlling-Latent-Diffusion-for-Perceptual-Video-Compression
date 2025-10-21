@@ -3,22 +3,22 @@
 # Input folder
 INPUT_DIR="data/test_videos"
 # List of videos
-# VIDEOS=("Beauty" "Jockey" "Bosphorus" "ShakeNDry" "HoneyBee" "YachtRide" "ReadySteadyGo")
+VIDEOS=("Beauty" "Jockey" "Bosphorus" "ShakeNDry" "HoneyBee" "YachtRide" "ReadySteadyGo")
 # VIDEOS=("HoneyBee" "YachtRide")
-VIDEOS=("MarketPlace" "RitualDance")
+# VIDEOS=("MarketPlace" "RitualDance")
 # VIDEOS=("BasketballDrive" "Cactus")
 # VIDEOS=("BQTerrace")
 # Parameters
 WIDTH=1920
 HEIGHT=1080
-FPS=60
+FPS=120
 FRAMES=96
-BPPS=(0.006 0.01 0.05 0.1)
+BPPS=(0.006 0.01 0.05)
 
 # Loop over all videos
 for VIDEO in "${VIDEOS[@]}"; do
-    # INPUT="${INPUT_DIR}/${VIDEO}_${WIDTH}x${HEIGHT}_${FPS}fps_420_8bit_YUV.yuv"
-    INPUT="${INPUT_DIR}/B_${VIDEO}_${WIDTH}x${HEIGHT}_${FPS}fps_10bit_420.yuv"
+    INPUT="${INPUT_DIR}/${VIDEO}_${WIDTH}x${HEIGHT}_${FPS}fps_420_8bit_YUV.yuv"
+    # INPUT="${INPUT_DIR}/B_${VIDEO}_${WIDTH}x${HEIGHT}_${FPS}fps_10bit_420.yuv"
 
     for BPP in "${BPPS[@]}"; do
         # Compute bitrate in bps
@@ -26,14 +26,14 @@ for VIDEO in "${VIDEOS[@]}"; do
         BITRATE_INT=$(printf "%.0f" $BITRATE)
 
         # Folder name
-        OUT_DIR="benchmark_results/gop8_results/h264_class_b_gop8/${VIDEO}/bpp_${BPP}"
+        OUT_DIR="benchmark_results/gop8_results/h264_uvg_gop8/${VIDEO}/bpp_${BPP}"
         mkdir -p "$OUT_DIR"
 
         echo "Encoding $VIDEO at bpp=$BPP (bitrate=$BITRATE_INT bps)"
 
         # Encode with HEVC (96 frames) # -pix_fmt yuv420p10le or yuv420p
-        ffmpeg -s:v ${WIDTH}x${HEIGHT} -pix_fmt yuv420p10le -r $FPS -i "$INPUT" \
-        -frames:v $FRAMES -c:v libx264 -preset medium -b:v ${BITRATE_INT} \
+        ffmpeg -s:v ${WIDTH}x${HEIGHT} -pix_fmt yuv420p -r $FPS -i "$INPUT" \
+        -frames:v $FRAMES -c:v libx264 -preset fast -b:v ${BITRATE_INT} \
         -x265-params "keyint=8:min-keyint=8:scenecut=0" \
         "$OUT_DIR/output.mp4" -y
 

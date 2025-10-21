@@ -109,6 +109,7 @@ for video in videos:
     for kind, val in avg_stats.items():
         bits_ours_data_uvg[kind][video] = val
 
+print(bits_ours_data_uvg)
 # --- CALCULATE BPP FOR EACH GOP ---
 bpp_results = {}
 
@@ -128,9 +129,11 @@ for gop in GOPS:
         bpp_none = intra_bits / total_pixels
         bpp_sparse = (intra_bits + sparse_bits) / total_pixels
         bpp_dense = (intra_bits + dense_bits) / total_pixels
+        # bpp_sparse = (sparse_bits) / total_pixels
+        # bpp_dense = (dense_bits) / total_pixels
 
         bpp_results[gop][video] = {
-            "none": bpp_none,
+            "none":bpp_none ,
             "sparse": bpp_sparse,
             "dense": bpp_dense
         }

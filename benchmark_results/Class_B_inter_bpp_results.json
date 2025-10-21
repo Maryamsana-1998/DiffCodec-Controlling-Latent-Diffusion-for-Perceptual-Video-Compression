@@ -1,0 +1,83 @@
+{
+    "2": {
+        "RitualDance": {
+            "none": 0,
+            "sparse": 0.0034227801519468187,
+            "dense": 0.0
+        },
+        "BQTerrace": {
+            "none": 0,
+            "sparse": 0.00396803774928775,
+            "dense": 0.008465646090534979
+        },
+        "MarketPlace": {
+            "none": 0,
+            "sparse": 0.0033595679012345674,
+            "dense": 0.0
+        },
+        "Cactus": {
+            "none": 0,
+            "sparse": 0.002438479344729345,
+            "dense": 0.011301526616221956
+        },
+        "BasketballDrive": {
+            "none": 0,
+            "sparse": 0.0031474655745489083,
+            "dense": 0.01954639012345679
+        }
+    },
+    "4": {
+        "RitualDance": {
+            "none": 0,
+            "sparse": 0.005134170227920228,
+            "dense": 0.0
+        },
+        "BQTerrace": {
+            "none": 0,
+            "sparse": 0.005952056623931624,
+            "dense": 0.012698469135802469
+        },
+        "MarketPlace": {
+            "none": 0,
+            "sparse": 0.005039351851851852,
+            "dense": 0.0
+        },
+        "Cactus": {
+            "none": 0,
+            "sparse": 0.0036577190170940174,
+            "dense": 0.016952289924332935
+        },
+        "BasketballDrive": {
+            "none": 0,
+            "sparse": 0.004721198361823362,
+            "dense": 0.029319585185185185
+        }
+    },
+    "8": {
+        "RitualDance": {
+            "none": 0,
+            "sparse": 0.005989865265906933,
+            "dense": 0.0
+        },
+        "BQTerrace": {
+            "none": 0,
+            "sparse": 0.006944066061253561,
+            "dense": 0.01481488065843621
+        },
+        "MarketPlace": {
+            "none": 0,
+            "sparse": 0.005879243827160494,
+            "dense": 0.0
+        },
+        "Cactus": {
+            "none": 0,
+            "sparse": 0.004267338853276353,
+            "dense": 0.019777671578388424
+        },
+        "BasketballDrive": {
+            "none": 0,
+            "sparse": 0.00550806475546059,
+            "dense": 0.03420618271604938
+        }
+    }
+}

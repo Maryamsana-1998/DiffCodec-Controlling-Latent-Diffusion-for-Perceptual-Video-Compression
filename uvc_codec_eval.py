@@ -59,8 +59,8 @@ def evaluate_video(original_folder, pred_folder, all_frames=False,gop_size=4):
     return {}
 
 
-root_dir = "benchmark_results/gop8_results/hevc_uvg_gop8"
-gop_size = 4
+root_dir = "../UniControl_Video_Interpolation/evaluations/gop4/uvg/"
+gop_size = 8
 total_frames = 96
 height, width = 1024, 1920
 pixels_per_frame = height * width
@@ -70,73 +70,54 @@ inter_frames_per_video = total_frames - intra_frames_per_video
 results = {}
 inter_results = {}
 
-for video in os.listdir(root_dir):
-    print(f"Processing video: {video}")
-    video_path = os.path.join(root_dir, video)
-    if not os.path.isdir(video_path):
+for bpp_folder in os.listdir(root_dir):
+    print(f"Processing : {bpp_folder}")
+    bpp_path = os.path.join(root_dir, bpp_folder)
+    if not os.path.isdir(bpp_path):
+        print(bpp_folder, "is not a directory. Skipping...")
         continue
 
-    results[video] = []
-    inter_results[video] = []
+    results[bpp_folder] = {}
+    inter_results[bpp_folder] = {}
 
-    for bpp_folder in os.listdir(video_path):
-        print(f"  Evaluating bpp folder: {bpp_folder}")
-        bpp_path = os.path.join(video_path, bpp_folder)
-        if not os.path.isdir(bpp_path):
+    for video in os.listdir(bpp_path):
+        print(f"  Evaluating : {video}")
+        video_path = os.path.join(root_dir, bpp_folder, video)
+        if not os.path.isdir(video_path):
+            print(video_path, "is not a directory. Skipping...")
             continue
 
         original_path = os.path.join('data', video, 'images')
+        print(f"Original path: {original_path}", video_path)
 
         # Evaluate metrics (assuming evaluate_video is defined elsewhere)
         metrics = evaluate_video(
             original_path,
-            bpp_path,
+            video_path,
             all_frames=False,
             gop_size=gop_size
         )
         all_metrics = evaluate_video(
             original_path,
-            bpp_path,
+            video_path,
             all_frames=True,
             gop_size=gop_size
         )
 
-        # Read intra/inter byte stats
-        stats_path = os.path.join(bpp_path, "intra_inter_storage.txt")
-        if not os.path.isfile(stats_path):
-            continue
-
-        with open(stats_path, "r") as f:
-            values = {}
-            for line in f:
-                if ":" in line:
-                    key, val = line.split(":")
-                    values[key.strip()] = int(val.strip())
-
-        inter_bytes = values.get('Inter bytes', 0)
-        total_bytes = values.get('Total bytes', 0)
-
-        total_bpp = (total_bytes * 8) / (total_frames * pixels_per_frame)
-        inter_bpp = (inter_bytes * 8) / (inter_frames_per_video * pixels_per_frame)
-
-        inter_results[video].append({
+        inter_results[bpp_folder][video]= {
             'codec': 'UVC',
-            'bpp_folder': bpp_folder,
-            'inter_bpp': inter_bpp,
             **metrics
-        })
-        results[video].append({
-            'codec': 'hevc',
-            'bpp_folder': bpp_folder,
-            'total_bpp': total_bpp,
-            **all_metrics
-        })
+        }
+        # results[bpp_folder][video]= {
+        #     'codec': 'UVC',
+        #     **all_metrics
+        # }
         
-result_path = os.path.join(root_dir ,'results_fast.json')
+result_path = os.path.join(root_dir ,'results.json')
 
-inter_result_path = os.path.join(root_dir ,'inter_results_fast.json')
-with open(result_path, "w") as f:
-    json.dump(results, f, indent=4)
+inter_result_path = os.path.join(root_dir ,'inter_results.json')
+# with open(result_path, "w") as f:
+#     json.dump(results, f, indent=4)
 
 with open(inter_result_path, "w") as f:
     json.dump(inter_results, f, indent=4)
