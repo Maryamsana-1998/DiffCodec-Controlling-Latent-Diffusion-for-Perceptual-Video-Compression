@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 from scipy.interpolate import PchipInterpolator, interp1d
+import bjontegaard as bd
 
-def bd_rate_safe(R1, Q1, R2, Q2, higher_better=True):
+def bd_rate(R1, Q1, R2, Q2, higher_better=True):
     """
     Robust Bjøntegaard delta-rate computation.
     Handles few points, non-monotonic data, and avoids crazy results.
@@ -47,7 +48,37 @@ def bd_rate_safe(R1, Q1, R2, Q2, higher_better=True):
     avg_diff = (int2 - int1) / (maxQ - minQ)
     return (np.exp(avg_diff) - 1) * 100
 
-# -------------------------
+def bd_rate_safe(R1, Q1, R2, Q2, higher_better=True):
+    R1, Q1, R2, Q2 = map(np.array, (R1, Q1, R2, Q2))
+
+    if not higher_better:
+        Q1, Q2 = -Q1, -Q2
+
+    sort1, sort2 = np.argsort(Q1), np.argsort(Q2)
+    Q1, R1 = Q1[sort1], R1[sort1]
+    Q2, R2 = Q2[sort2], R2[sort2]
+
+    minQ = min(Q1.min(), Q2.min()) * 0.95  # Extend lower bound
+    maxQ = max(Q1.max(), Q2.max()) * 1.05  # Extend upper bound
+
+    logR1, logR2 = np.log(R1), np.log(R2)
+
+    if len(Q1) >= 3:
+        f1 = PchipInterpolator(Q1, logR1, extrapolate=True)
+    else:
+        f1 = interp1d(Q1, logR1, fill_value="extrapolate")
+    if len(Q2) >= 3:
+        f2 = PchipInterpolator(Q2, logR2, extrapolate=True)
+    else:
+        f2 = interp1d(Q2, logR2, fill_value="extrapolate")
+
+    Qs = np.linspace(minQ, maxQ, 100)
+    int1 = np.trapz(f1(Qs), Qs)
+    int2 = np.trapz(f2(Qs), Qs)
+
+    avg_diff = (int2 - int1) / (maxQ - minQ)
+    return (np.exp(avg_diff) - 1) * 100
+# # -------------------------
 # Input data
 # -------------------------
 ours_uvg_8 = pd.DataFrame({
@@ -104,13 +135,6 @@ h264_uvg_4 = pd.DataFrame({
 
 
 # Calculate BD-Rate for all comparisons
-comparisons = [
-    ('Ours vs H.264 (GOP8)', ours_uvg_8, h264_uvg_8),
-    ('Ours vs HEVC (GOP8)', ours_uvg_8, hevc_uvg_8),
-    ('Ours vs H.264 (GOP4)', ours_uvg_4, h264_uvg_4),
-    ('Ours vs HEVC (GOP4)', ours_uvg_4, hevc_uvg_4)
-]
-
 metrics = [
     ('PSNR', True),
     ('MS-SSIM', True),
@@ -118,12 +142,82 @@ metrics = [
     ('FID', False)
 ]
 
+# for comparison_name, ours_df, ref_df in comparisons:
+#     print(f"\n{comparison_name}:")
+#     for metric, higher_better in metrics:
+#         bd_rate = bd_rate_safe(
+#             ours_df['bpp'], ours_df[metric], 
+#             ref_df['bpp'], ref_df[metric],
+#             higher_better=higher_better
+#         )
+#         print(f"  {metric}: {bd_rate:.2f}%")
+# # ours and hevc as pandas DataFrames (columns: 'bpp','PSNR','MS-SSIM','LPIPS','FID')
+# Define comparisons
+# Function to ensure monotonicity and calculate BD-Rate
+def calculate_bd_rate(rate_anchor, dist_anchor, rate_test, dist_test, higher_better=True):
+    # Sort by rate to ensure strictly increasing sequence
+    sort_idx_anchor = np.argsort(rate_anchor)
+    sort_idx_test = np.argsort(rate_test)
+    rate_anchor, dist_anchor = rate_anchor[sort_idx_anchor], dist_anchor[sort_idx_anchor]
+    rate_test, dist_test = rate_test[sort_idx_test], dist_test[sort_idx_test]
+
+    # Remove duplicates if any
+    _, unique_idx_anchor = np.unique(rate_anchor, return_index=True)
+    _, unique_idx_test = np.unique(rate_test, return_index=True)
+    rate_anchor, dist_anchor = rate_anchor[unique_idx_anchor], dist_anchor[unique_idx_anchor]
+    rate_test, dist_test = rate_test[unique_idx_test], dist_test[unique_idx_test]
+
+    # Invert distortion for lower-is-better metrics
+    if not higher_better:
+        dist_anchor = -dist_anchor
+        dist_test = -dist_test
+
+    try:
+        # Calculate BD-Rate with PCHIP interpolation
+        bd_value = bd_rate(rate_anchor, dist_anchor, rate_test, dist_test, higher_better=higher_better)
+        return bd_value
+    except Exception as e:
+        print(f"Error: {e}")
+        return np.nan
+
+# Define comparisons
+comparisons = [
+    ('Ours vs H.264 (GOP8)', ours_uvg_8, h264_uvg_8),
+    ('Ours vs HEVC (GOP8)', ours_uvg_8, hevc_uvg_8),
+    ('Ours vs H.264 (GOP4)', ours_uvg_4, h264_uvg_4),
+    ('Ours vs HEVC (GOP4)', ours_uvg_4, hevc_uvg_4)
+]
+
+# Metrics configuration: (name, higher_better)
+metrics_config = [
+    ('PSNR', True),
+    ('MS-SSIM', True),
+    ('LPIPS', False),
+    ('FID', False)
+]
+
+print("BD-Rate Calculations using bjontegaard library")
+print("=" * 60)
+
 for comparison_name, ours_df, ref_df in comparisons:
     print(f"\n{comparison_name}:")
-    for metric, higher_better in metrics:
-        bd_rate = bd_rate_safe(
-            ours_df['bpp'], ours_df[metric], 
-            ref_df['bpp'], ref_df[metric],
-            higher_better=higher_better
-        )
-        print(f"  {metric}: {bd_rate:.2f}%")
+    print("-" * 40)
+    
+    for metric_name, higher_better in metrics_config:
+        # Extract rate and distortion
+        rate_anchor = ref_df['bpp'].values
+        dist_anchor = ref_df[metric_name].values
+        rate_test = ours_df['bpp'].values
+        dist_test = ours_df[metric_name].values
+        
+        # Calculate BD-Rate
+        bd_value = calculate_bd_rate(rate_anchor, dist_anchor, rate_test, dist_test, higher_better)
+        
+        # Format output
+        if np.isnan(bd_value):
+            print(f"  {metric_name}: NaN")
+        else:
+            print(f"  {metric_name}: {bd_value:+.2f}%")
+
+print("\n" + "=" * 60)
+print("Note: Positive = Ours uses MORE bitrate | Negative = Ours uses LESS bitrate")
