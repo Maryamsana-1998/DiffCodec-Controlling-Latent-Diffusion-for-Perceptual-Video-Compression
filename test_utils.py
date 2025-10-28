@@ -6,7 +6,7 @@ from PIL import Image
 from torchmetrics.image.fid import FrechetInceptionDistance
 import lpips
 import matplotlib.pyplot as plt
-# from fvd_utils.my_utils import calculate_fvd
+from fvd_utils.my_utils import calculate_fvd
 
 
 # Initialize LPIPS and FID models
@@ -66,17 +66,17 @@ def calculate_metrics_batch(original_images, pred_images):
         pred_frames.append(pred_tensor )
 
     # # Prepare 5D tensors for FVD: (B, T, C, H, W)
-    # org_video = torch.stack(org_frames, dim=0).permute(1, 0, 2, 3, 4).repeat(2, 1, 1, 1, 1)
-    # pred_video = torch.stack(pred_frames, dim=0).permute(1, 0, 2, 3, 4).repeat(2, 1, 1, 1, 1)
+    org_video = torch.stack(org_frames, dim=0).permute(1, 0, 2, 3, 4).repeat(2, 1, 1, 1, 1)
+    pred_video = torch.stack(pred_frames, dim=0).permute(1, 0, 2, 3, 4).repeat(2, 1, 1, 1, 1)
     
     # Compute metrics
     fid_value = fid_model.compute().item()
-    # fvd_value = calculate_fvd(org_video, pred_video)
+    fvd_value = calculate_fvd(org_video, pred_video)
 
     return {
         "PSNR": sum(psnr_values) / len(psnr_values),
         "MS-SSIM": sum(ms_ssim_values) / len(ms_ssim_values),
         "LPIPS": sum(lpips_values) / len(lpips_values),
         "FID": fid_value,
-        # "FVD": fvd_value
+        "FVD": fvd_value
     }

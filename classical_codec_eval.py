@@ -59,7 +59,7 @@ def evaluate_video(original_folder, pred_folder, all_frames=False,gop_size=4):
     return {}
 
 
-root_dir = "benchmark_results/gop8_results/hevc_uvg_gop8"
+root_dir = "benchmark_results/gop8_results/h264_class_b_gop8"
 gop_size = 4
 total_frames = 96
 height, width = 1024, 1920

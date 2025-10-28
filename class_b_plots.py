@@ -7,6 +7,55 @@ import matplotlib.pyplot as plt
 
 plt.rcParams['text.usetex'] = True
 
+def average_metrics_from_json(json_path):
+    """
+    Reads a JSON file containing metrics per video and resolution,
+    and returns a DataFrame with the average values across videos
+    for each resolution block.
+
+    Parameters
+    ----------
+    json_path : str
+        Path to the JSON file.
+
+    Returns
+    -------
+    pd.DataFrame
+        Sorted DataFrame with columns:
+        ['total_bpp', 'MS-SSIM', 'LPIPS', 'FID', 'PSNR', 'FVD']
+    """
+    # Load JSON data
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    # Prepare lists
+    resolutions = []
+    bpps, msssim, lpips, fid, psnr, fvd = [], [], [], [], [], []
+
+    # Compute averages per resolution
+    for key, videos in data.items():
+        vals = pd.DataFrame(videos).T  # videos as rows
+        resolutions.append(key)
+        bpps.append(vals["bpp"].mean())
+        msssim.append(vals["MS-SSIM"].mean())
+        lpips.append(vals["LPIPS"].mean())
+        fid.append(vals["FID"].mean())
+        psnr.append(vals["PSNR"].mean())
+        fvd.append(vals["FVD"].mean())
+
+    # Create DataFrame
+    df = pd.DataFrame({
+        "total_bpp": bpps,
+        "MS-SSIM": msssim,
+        "LPIPS": lpips,
+        "FID": fid,
+        "PSNR": psnr,
+        "FVD": fvd
+    }, index=resolutions)
+
+    return df
+
+
 # Function to load and compute mean metrics from a JSON file for a specific case
 def compute_mean_metrics(json_path):
     with open(json_path, "r") as f:
@@ -54,7 +103,7 @@ ours = pd.DataFrame(data_rows)
 
 # Sort by total_bpp
 ours = ours.sort_values('total_bpp').reset_index(drop=True)
-
+# ours['FVD'] = [220000, 143002, 94300]
 print("\nDataFrame with average metrics across cases:")
 print(ours)
  
@@ -74,19 +123,20 @@ def load_and_process_json(file_path):
                 record['video_name'] = video_name
                 flattened_data.append(record)
     df = pd.DataFrame(flattened_data)
-    return df.groupby('bpp_folder')[['total_bpp', 'LPIPS', 'MS-SSIM', 'PSNR', 'FID']].mean().sort_values('total_bpp')
+    return df.groupby('bpp_folder')[['total_bpp', 'LPIPS', 'MS-SSIM', 'PSNR', 'FID','FVD']].mean().sort_values('total_bpp')
 
 # Load data
 h264_grouped = load_and_process_json('benchmark_results/gop8_results/h264_class_b_gop8/results_fast.json')
 hevc_grouped = load_and_process_json('benchmark_results/gop8_results/hevc_class_b_gop8/results_fast.json')
 
 # DVC
-DVC_uvg = pd.DataFrame({
+DVC_classb = pd.DataFrame({
     'total_bpp': [0.1, 0.2, 0.3],
     'LPIPS': [0.156, 0.135, 0.10],
     'FID': [74, 40, 28.5 ],
     'MS-SSIM': [0.942, 0.955, 0.962],
-    'PSNR': [31.5, 33.0, 34.0]
+    'PSNR': [31.5, 33.0, 34.0],
+    'FVD': [35000, 25000, 20000]
 }).sort_values('total_bpp')
 
 # RLVC
@@ -99,19 +149,31 @@ RLVC_classb = pd.DataFrame({
     'FVD': [18223.082329, 5635.863374, 2166.578799]
 }).sort_values('total_bpp')
 
+diffvc= pd.DataFrame({
+    'total_bpp': [0.03, 0.06, 0.11, 0.15],
+    'LPIPS': [0.124,0.085,0.075,0.07],
+    'FID': [20, 12, 8, 4.2 ],
+    'MS-SSIM': [0.90, 0.925, 0.935, 0.938],
+    'PSNR': [26,27,27.5, 27.8],
+    'FVD': [890000, 755600, 675956,578000]
+}).sort_values('total_bpp')
+
+
 
 # # PLVC: Load CSV and rename BPP to total_bpp
-# plvc = pd.read_csv('benchmark_results/plvc_metrics.csv')
-# plvc = plvc.rename(columns={'BPP': 'total_bpp'}).sort_values('total_bpp')
+plvc = average_metrics_from_json('benchmark_results/plvc_classb_results.json')
+plvc = plvc.reset_index(drop=True).sort_values("total_bpp")
+print(plvc)
 
 # Save each dataset to CSV
 datasets = [
     ('h264', h264_grouped),
     ('hevc', hevc_grouped),
-    ('dvc', DVC_uvg),
+    ('dvc', DVC_classb),
     ('rlvc', RLVC_classb),
-    # ('plvc', plvc)
+    ('plvc', plvc),
     ('ours', ours),
+    ('diffvc_uvg', diffvc)
 ]
 
 for name, df in datasets:
@@ -123,26 +185,29 @@ print("CSV files saved in", output_dir)
 # Define datasets and their plotting styles
 
 datasets = [
-    {'data': h264_grouped, 'label': 'H.264', 'color': '#BF0606', 'marker': 'o'},
-    {'data': hevc_grouped, 'label': 'HEVC', 'color': '#CC6704', 'marker': 's'},
-    {'data': DVC_uvg, 'label': 'DVC', 'color': '#0F753D', 'marker': '^'},
-    {'data': RLVC_classb, 'label': 'RLVC', 'color': '#70CCCF', 'marker': 'D'},
-    #  {'data': plvc, 'label': 'PLVC', 'color': '#4D2DA1', 'marker': '+'},
-    {'data': ours, 'label': 'Ours', 'color': '#AD34BA', 'marker': '*'}
+    {'data': h264_grouped, 'label': 'H.264', 'color': '#8B4513', 'marker': 'o'},
+    {'data': hevc_grouped, 'label': 'HEVC', 'color': '#FAA502', 'marker': 's'},
+    {'data': DVC_classb, 'label': 'DVC', 'color': '#0D00FF', 'marker': '^'},
+    {'data': RLVC_classb, 'label': 'RLVC', 'color': '#1F8000', 'marker': 'D'},
+     {'data': plvc, 'label': 'PLVC', 'color': '#800080', 'marker': '+'},
+    {'data': ours, 'label': 'Ours', 'color': '#F71702', 'marker': '*'},
+    {'data': diffvc, 'label': 'DiffVC', 'color': '#00CED1', 'marker': 'x'},
 ]
 # Metrics to plot
-metrics = ['PSNR', 'MS-SSIM', 'LPIPS', 'FID']
+metrics = ['PSNR', 'MS-SSIM', 'LPIPS', 'FID','FVD']
 titles = {
     'PSNR': 'PSNR vs Bitrate',
     'MS-SSIM': 'MS-SSIM vs Bitrate',
     'LPIPS': 'LPIPS vs Bitrate',
-    'FID': 'FID vs Bitrate'
+    'FID': 'FID vs Bitrate',
+    'FVD': 'FVD vs Bitrate'
 }
 y_labels = {
     'PSNR': 'PSNR (dB)',
     'MS-SSIM': 'MS-SSIM',
     'LPIPS': 'LPIPS',
-    'FID': 'FID'
+    'FID': 'FID',
+    'FVD': 'FVD'
 }
 
 # Create subplots (2x2 grid for the four metrics)

@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 
 # === Configuration ===
-GOP_SIZE = 8  # Configurable GOP size (e.g., 4, 8)
-DATASET = "uvg"  # Configurable dataset (e.g., "uvg", "class_b")
+GOP_SIZE = 4  # Configurable GOP size (e.g., 4, 8)
+DATASET = "class_b"  # Configurable dataset (e.g., "uvg", "class_b")
 
 # Global font style
 plt.rcParams['text.usetex'] = True
@@ -27,8 +27,8 @@ def load_and_process_json(file_path):
 
 # Load JSON data based on GOP size and dataset
 base_path = f'benchmark_results/gop{GOP_SIZE}_results'
-h264_grouped = load_and_process_json(f'{base_path}/h264_{DATASET}_gop{GOP_SIZE}/inter_results_fast.json')
-hevc_grouped = load_and_process_json(f'{base_path}/hevc_{DATASET}_gop{GOP_SIZE}/inter_results_fast.json')
+h264_grouped = load_and_process_json(f'{base_path}/h264_{DATASET}_gop{GOP_SIZE}/inter_results.json')
+hevc_grouped = load_and_process_json(f'{base_path}/hevc_{DATASET}_gop{GOP_SIZE}/inter_results.json')
 
 # BPP values for Ours (interpolated) based on dataset and GOP size
 inter_bpp_uvg = {
